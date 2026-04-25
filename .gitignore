@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+build/
+dist/
+
+# Docker
+.devcontainer/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project Build
+*.o
+*.so
+*.elf
+obj_dir/
+
+# CIP
+DESIGN_PHILOSOPHY.md
+
