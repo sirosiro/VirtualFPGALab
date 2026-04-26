@@ -4,6 +4,8 @@ LDFLAGS = -shared -ldl
 
 SHIM_SRC = src/shim/libfpgashim.c
 SHIM_OUT = libfpgashim.so
+DTS_SRC = tests/vfpga_config.dts
+GEN_SCRIPT = scripts/gen_shim.py
 
 TEST_SRC = tests/test_open.c
 TEST_OUT = tests/test_open
@@ -28,6 +30,9 @@ SIM_SRC = src/sim/counter_sim.cpp
 SIM_OUT = obj_dir/Vcounter
 
 all: $(SHIM_OUT) $(TEST_OUT) $(TEST_SHM_OUT) $(TEST_REG_OUT) $(TEST_I2C_OUT) $(TEST_VER_OUT) verilate
+
+$(SHIM_SRC): $(DTS_SRC) $(GEN_SCRIPT)
+	python3 $(GEN_SCRIPT) $(DTS_SRC) $(SHIM_SRC)
 
 $(SHIM_OUT): $(SHIM_SRC)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
@@ -55,6 +60,7 @@ verilate: $(SIM_OUT)
 
 clean:
 	rm -f $(SHIM_OUT) $(TEST_OUT) $(TEST_SHM_OUT) $(TEST_REG_OUT) $(TEST_I2C_OUT) $(TEST_VER_OUT)
+	rm -f $(SHIM_SRC)
 	rm -rf obj_dir
 
 .PHONY: all clean verilate

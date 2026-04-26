@@ -29,12 +29,15 @@
     - **理由:** FW開発のスピードを最大化するため。詳細なタイミング検証は[Verilator](verilator.md)等に責務を分離する。
 
 ### 2. 主要なアーキテクチャ決定の記録 (Key Architectural Decisions)
-- **2026-04-24: システムコール・インターセプトの採用**
+- **2026-04-25: システムコール・インターセプトの採用**
     - **Decision:** [LD_PRELOAD](LD_PRELOAD.md) による共有ライブラリの動的挿入。
     - **Rationale:** カーネルモジュールの作成（UIO/I2Cスタブ）はWSL2のカーネル再構築が必要になる場合があり、導入障壁が高いため、ユーザー空間で完結するShim層が最適と判断。
-- **2026-04-24: 共有メモリによるレジスタ再現**
+- **2026-04-25: 共有メモリによるレジスタ再現**
     - **Decision:** /dev/shm を使用したレジスタ空間の共有。
     - **Rationale:** 通信速度の最大化と、Python等からの容易なアクセスを実現するため。
+- **2026-04-26: DTS 駆動による Shim 自動生成の採用**
+    - **Decision:** `./tests/vfpga_config.dts` を入力とし、`libfpgashim.c` をビルド時に自動生成する。
+    - **Rationale:** 実機開発における「設計図」である Device Tree をエミュレーション環境の構成定義として直接利用することで、実機構成との完全な同期を担保する。また、Shim 実装の詳細（フックのボイラープレート等）を自動化し、エンジニアが「デバイス構成」の定義に集中できるようにするため。
 
 ### 3. AIとの協調に関する指針 (AI Collaboration Policy)
 - **未知の問題への対処:** 憲章にないデバイス（SPI, UART等）の追加が必要になった際、AIは既存のI2Cエミュレーションのパターンを継承し、複数のインターセプト案を提示すること。
@@ -45,6 +48,7 @@
 <!--
 ### 4.1. Interceptor Shim (libfpgashim.so)
 - **責務:** libcの open, mmap, ioctl をラップし、/dev/uio* へのアクセスを検知して仮想共有メモリへ橋渡しする。
+- **生成方式:** `tests/*.dts` をソースとし、`scripts/gen_shim.py` によって自動生成される。直接編集は禁止。
 - **提供するAPI:** 
     - int open(const char *pathname, int flags, ...)
     - void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)

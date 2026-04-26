@@ -21,6 +21,7 @@ Thumbs.db
 *.so
 *.elf
 obj_dir/
+src/shim/libfpgashim.c
 
 # CIP
 DESIGN_PHILOSOPHY.md
