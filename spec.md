@@ -66,7 +66,8 @@ graph TD
 
 ### 4.3. Logic Visualization & Diagnostic Tool (The Dashboard)
 - **責務:** 共有メモリ内のレジスタ状態をリアルタイムで監視・可視化する。
-- **意義:** 実機のデバッガを繋ぐことなく、ブラウザ（Port: 5000）から内部状態を把握できる。
+- **アクセス:** `python3 src/controller/dashboard_server.py` を起動し、ブラウザから **`http://localhost:8080`** へアクセスする（VS Code 環境では自動的にポート転送される）。
+- **意義:** 実機のデバッガを繋ぐことなく、ブラウザから内部状態を把握できる。
 
 ### 4.4. RTL-C++ Integrated Bridge (Verilator Interface)
 - **責務:** HDL論理を [Verilator](verilator.md) で高速な C++ モデルとして実行し、共有メモリの特定オフセットと信号を同期させる。

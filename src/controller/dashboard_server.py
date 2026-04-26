@@ -1,18 +1,54 @@
 import struct
+import re
 from flask import Flask, jsonify, render_template_string
 from flask_cors import CORS
 from multiprocessing import shared_memory
-import threading
-
-SHM_NAME = "vfpga_reg"
-SHM_SIZE = 1024
 
 app = Flask(__name__)
 CORS(app)
 
+def get_shm_config_from_dts(dts_path):
+    config = {
+        "shm_name": "vfpga_reg",
+        "shm_size": 1024,
+        "registers": []
+    }
+    try:
+        with open(dts_path, 'r') as f:
+            content = f.read()
+        
+        # Extract SHM name and size
+        match = re.search(r'([a-zA-Z0-9_]+)@[0-9a-f]+\s*\{([^}]+)\}', content)
+        if match:
+            config["shm_name"] = match.group(1).strip()
+            body = match.group(2)
+            reg_match = re.search(r'reg\s*=\s*<[^ ]+\s+([^>]+)>', body)
+            if reg_match:
+                config["shm_size"] = int(reg_match.group(1).strip(), 0)
+            
+            # Extract register names and offsets
+            if 'registers =' in body:
+                reg_list_match = re.search(r'registers\s*=\s*([^;]+);', body)
+                if reg_list_match:
+                    reg_list = reg_list_match.group(1).split(',')
+                    for r in reg_list:
+                        r = r.strip().strip('"')
+                        if '@' in r:
+                            name, offset = r.split('@')
+                            config["registers"].append({
+                                "name": name.strip(),
+                                "offset": int(offset.strip(), 0)
+                            })
+    except Exception as e:
+        print(f"[Dashboard] Error parsing DTS: {e}")
+    return config
+
+DTS_PATH = "tests/vfpga_config.dts"
+CONFIG = get_shm_config_from_dts(DTS_PATH)
+
 def get_shm():
     try:
-        return shared_memory.SharedMemory(name=SHM_NAME)
+        return shared_memory.SharedMemory(name=CONFIG["shm_name"])
     except FileNotFoundError:
         return None
 
@@ -20,32 +56,23 @@ def get_shm():
 def get_registers():
     shm = get_shm()
     if not shm:
-        return jsonify({"error": "SHM not found"}), 404
+        return jsonify({"error": f"SHM '{CONFIG['shm_name']}' not found"}), 404
     
     registers = []
-    # Read first 32 bytes as 8 registers (32-bit each)
-    for i in range(8):
-        offset = i * 4
-        val = struct.unpack("<I", shm.buf[offset:offset+4])[0]
-        registers.append({
-            "address": f"0x{offset:02X}",
-            "value": f"0x{val:08X}",
-            "decimal": val,
-            "name": get_reg_name(offset)
-        })
+    # Use registers defined in DTS
+    for reg in CONFIG["registers"]:
+        offset = reg["offset"]
+        if offset + 4 <= CONFIG["shm_size"]:
+            val = struct.unpack("<I", shm.buf[offset:offset+4])[0]
+            registers.append({
+                "address": f"0x{offset:02X}",
+                "value": f"0x{val:08X}",
+                "decimal": val,
+                "name": reg["name"]
+            })
     
     shm.close()
     return jsonify(registers)
-
-def get_reg_name(offset):
-    names = {
-        0x00: "Magic ID",
-        0x04: "Status / Debug",
-        0x10: "RTL Reset",
-        0x14: "RTL Enable",
-        0x18: "RTL Counter"
-    }
-    return names.get(offset, f"Reg {offset:02X}")
 
 DASHBOARD_HTML = """
 <!DOCTYPE html>
@@ -82,10 +109,10 @@ DASHBOARD_HTML = """
         }
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 1.5rem;
             width: 100%;
-            max-width: 1000px;
+            max-width: 1200px;
         }
         .card {
             background: var(--card-bg);
@@ -104,10 +131,12 @@ DASHBOARD_HTML = """
             font-size: 0.85rem;
             color: var(--text-secondary);
             margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         .reg-value {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 1.5rem;
+            font-size: 1.8rem;
             color: var(--accent-color);
         }
         .reg-addr {
@@ -115,6 +144,8 @@ DASHBOARD_HTML = """
             color: var(--text-secondary);
             margin-top: 1rem;
             text-align: right;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 0.5rem;
         }
         .status {
             margin-top: 2rem;
@@ -134,6 +165,7 @@ DASHBOARD_HTML = """
         async function updateRegisters() {
             try {
                 const response = await fetch('/api/registers');
+                if (!response.ok) throw new Error('Backend not ready');
                 const data = await response.json();
                 const grid = document.getElementById('register-grid');
                 grid.innerHTML = '';
@@ -144,14 +176,14 @@ DASHBOARD_HTML = """
                     card.innerHTML = `
                         <div class="reg-name">${reg.name}</div>
                         <div class="reg-value">${reg.value}</div>
-                        <div class="reg-addr">Addr: ${reg.address}</div>
+                        <div class="reg-addr">Offset: ${reg.address}</div>
                     `;
                     grid.appendChild(card);
                 });
 
                 document.getElementById('last-update').innerText = 'Last update: ' + new Date().toLocaleTimeString();
             } catch (error) {
-                console.error('Failed to fetch registers:', error);
+                document.getElementById('last-update').innerText = 'Status: Disconnected (Wait for backend)';
             }
         }
 
@@ -167,4 +199,6 @@ def index():
     return render_template_string(DASHBOARD_HTML)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    print(f"[Dashboard] Starting on port 8080...")
+    print(f"[Dashboard] Monitoring SHM: {CONFIG['shm_name']}")
+    app.run(host='0.0.0.0', port=8080)
