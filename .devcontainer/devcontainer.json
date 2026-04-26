@@ -1,0 +1,25 @@
+{
+    "name": "VirtualFPGALab Dev Container",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-python.python",
+                "ms-python.vscode-pylance"
+            ]
+        }
+    },
+    "remoteUser": "root",
+    "runArgs": [
+        "--cap-add=SYS_PTRACE",
+        "--security-opt",
+        "seccomp=unconfined",
+        "--shm-size=512m"
+    ],
+    "postCreateCommand": "echo 'Dev Container is ready!'",
+    "forwardPorts": [8080]
+}
