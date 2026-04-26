@@ -54,7 +54,7 @@ graph TD
 ## 4. 各コンポーネントの機能詳細 (Component Specifications)
 
 ### 4.1. Syscall Interceptor Layer (Shim)
-- **責務:** アプリケーションが発行するデバイスアクセス（`open`, `ioctl`, `mmap`）を [LD_PRELOAD](LD_PRELOAD.md) でインターセプトし、仮想デバイスへリダイレクトする。
+- **責務:** アプリケーションが発行するデバイスアクセス（`open`, `ioctl`, `mmap`）を [LD_PRELOAD](AddInfo_LD_PRELOAD.md) でインターセプトし、仮想デバイスへリダイレクトする。
 - **現状:** `/dev/fpga*`, `/dev/uio*`, `/dev/i2c-*` をトラップし、共有メモリまたはダミーデバイスへ誘導済み。
 - **生成:** `tests/vfpga_config.dts` をソースとし、`scripts/gen_vfpga.py` により自動生成される。
 - **原則:** Device Tree Source (FPGAのレジスタアドレスや定義) を唯一の真実 (Source of Truth) とし、Shim (Cコード) と RTL (Verilog) の一貫性を自動的に担保する。
@@ -70,7 +70,7 @@ graph TD
 - **意義:** 実機のデバッガを繋ぐことなく、ブラウザから内部状態を把握できる。
 
 ### 4.4. RTL-C++ Integrated Bridge (Verilator Interface)
-- **責務:** HDL論理を [Verilator](verilator.md) で高速な C++ モデルとして実行し、共有メモリの特定オフセットと信号を同期させる。
+- **責務:** HDL論理を [Verilator](AddInfo_verilator.md) で高速な C++ モデルとして実行し、共有メモリの特定オフセットと信号を同期させる。
 - **生成:** DTS の `registers` 定義に基づき、バス・インターフェースを備えた Verilog スケルトン (`vfpga_top.v`) が自動生成される。
 
 ---
