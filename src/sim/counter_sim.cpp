@@ -1,63 +1,61 @@
 #include <iostream>
 #include <verilated.h>
-#include "Vcounter.h"
+#include "Vvfpga_top.h"
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdint.h>
 
-#define SHM_NAME "/vfpga_reg"
-#define SHM_SIZE 1024
+#include "vfpga_config.h"
 
-// Register Offsets
-#define REG_RST    (0x10 / 4)
-#define REG_EN     (0x14 / 4)
-#define REG_COUNT  (0x18 / 4)
+// These offsets should ideally come from a shared header or DTS
+#define ADDR_RST    0x10
+#define ADDR_EN     0x14
+#define ADDR_COUNT  0x18
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
-    Vcounter* top = new Vcounter;
+    Vvfpga_top* top = new Vvfpga_top;
 
-    // Attach to shared memory
     int fd = shm_open(SHM_NAME, O_RDWR, 0666);
     if (fd == -1) {
-        std::cerr << "[Sim] shm_open failed. Please run vlogic_controller.py first." << std::endl;
+        std::cerr << "[Sim] shm_open failed. Run vlogic_controller.py first." << std::endl;
         return 1;
     }
 
-    uint32_t* regs = (uint32_t*)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (regs == MAP_FAILED) {
+    uint8_t* shm_ptr = (uint8_t*)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (shm_ptr == MAP_FAILED) {
         perror("[Sim] mmap failed");
         return 1;
     }
 
-    std::cout << "[Sim] Verilator simulation started. Syncing with SHM..." << std::endl;
+    std::cout << "[Sim] Verilator simulation (vfpga_top) started." << std::endl;
 
-    // Initial state
     top->clk = 0;
-    top->rst = 1;
-    top->en = 0;
+    top->rst_n = 1;
 
-    uint64_t main_time = 0;
     while (!Verilated::gotFinish()) {
         // Sync inputs from SHM to RTL
-        top->rst = regs[REG_RST] & 0x1;
-        top->en  = regs[REG_EN]  & 0x1;
+        top->addr = 0; // Not used in this simple sync, but could be
+        top->w_en = 0;
+
+        // In this generic sync, we map SHM offsets directly to RTL registers
+        // This is a bit manual, but demonstrates the link
+        top->RST = *(uint32_t*)(shm_ptr + ADDR_RST);
+        top->EN  = *(uint32_t*)(shm_ptr + ADDR_EN);
 
         // Toggle clock
         top->clk = !top->clk;
+        top->rst_n = 1; // Always active high reset in this mock
         top->eval();
 
-        // Sync outputs from RTL to SHM
+        // Sync outputs from RTL back to SHM
         if (top->clk) {
-            regs[REG_COUNT] = top->count;
+            *(uint32_t*)(shm_ptr + ADDR_COUNT) = top->CNT;
         }
 
-        main_time++;
-        
-        // Slow down simulation to avoid 100% CPU usage
-        usleep(10000); // 10ms per half-clock
+        usleep(10000); 
     }
 
     top->final();

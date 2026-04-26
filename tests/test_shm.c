@@ -2,45 +2,50 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <stdint.h>
 
-#define SHM_NAME "/vfpga_reg"
-#define SHM_SIZE 1024
+/* アプリは標準的なデバイスパスしか知らない */
+#define VIRTUAL_DEVICE "/dev/fpga0"
+#define REG_SIZE 1024
 
 int main() {
-    printf("--- Test Shared Memory Start ---\n");
+    printf("--- Test Application Access (via Shim) Start ---\n");
 
-    /* Open shared memory */
-    int fd = shm_open(SHM_NAME, O_RDONLY, 0666);
+    /* 1. 標準的な open() を呼び出す。Shimがこれをインターセプトする */
+    printf("[App] Opening %s...\n", VIRTUAL_DEVICE);
+    int fd = open(VIRTUAL_DEVICE, O_RDWR);
     if (fd == -1) {
-        perror("shm_open failed. Is the Python controller running?");
+        perror("[App] open failed. Is the Shim loaded correctly?");
         return 1;
     }
 
-    /* Map shared memory */
-    uint32_t *ptr = mmap(NULL, SHM_SIZE, PROT_READ, MAP_SHARED, fd, 0);
+    /* 2. mmap() も標準的な方法で行う */
+    uint32_t *ptr = mmap(NULL, REG_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (ptr == MAP_FAILED) {
-        perror("mmap failed");
+        perror("[App] mmap failed");
         close(fd);
         return 1;
     }
 
-    /* Read value from offset 0 */
-    uint32_t val = ptr[0];
-    printf("[C] Read value from shared memory: 0x%08X\n", val);
+    /* 3. 書き込みと読み出しの検証 */
+    uint32_t test_val = 0xDEADBEEF;
+    printf("[App] Writing 0x%08X to virtual device...\n", test_val);
+    ptr[0] = test_val;
 
-    if (val == 0x12345678) {
-        printf("[C] SUCCESS: Value matches expected 0x12345678\n");
+    uint32_t val = ptr[0];
+    printf("[App] Read back value: 0x%08X\n", val);
+
+    if (val == test_val) {
+        printf("[App] SUCCESS: Hardware Transparency Verified!\n");
     } else {
-        printf("[C] FAILURE: Value 0x%08X does not match expected 0x12345678\n", val);
+        printf("[App] FAILURE: Value mismatch!\n");
     }
 
     /* Cleanup */
-    munmap(ptr, SHM_SIZE);
+    munmap(ptr, REG_SIZE);
     close(fd);
 
-    printf("--- Test Shared Memory End ---\n");
+    printf("--- Test Application Access End ---\n");
     return 0;
 }

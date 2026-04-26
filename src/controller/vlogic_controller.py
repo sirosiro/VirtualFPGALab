@@ -1,50 +1,58 @@
 import time
 import struct
+import sys
+import re
 from multiprocessing import shared_memory
 
 SHM_NAME = "vfpga_reg"
-SHM_SIZE = 1024  # 1KB for registers
+
+def get_shm_info_from_dts(dts_path):
+    shm_name = "vfpga_reg"
+    shm_size = 1024
+    try:
+        with open(dts_path, 'r') as f:
+            content = f.read()
+        
+        # Find node@addr { ... reg = <... size> ... }
+        # Simple extraction for demo
+        match = re.search(r'([a-zA-Z0-9_]+)@[0-9a-f]+\s*\{[^}]+reg\s*=\s*<[^ ]+\s+([^>]+)>', content)
+        if match:
+            shm_name = match.group(1).strip()
+            shm_size = int(match.group(2).strip(), 0)
+    except Exception as e:
+        print(f"[Python] Error parsing DTS: {e}")
+    return shm_name, shm_size
 
 def main():
-    print(f"[Python] Starting Virtual Logic Controller...")
+    dts_path = "tests/vfpga_config.dts"
+    shm_name, shm_size = get_shm_info_from_dts(dts_path)
     
-    # Create shared memory
+    print(f"[Python] Starting Generic Virtual Logic Controller...")
+    print(f"[Python] Using DTS: {dts_path}")
+    print(f"[Python] Detected SHM Name: {shm_name}, Size: {shm_size}")
+    
     try:
-        # If it already exists, unlink it first
+        # Clean up
         try:
-            temp_shm = shared_memory.SharedMemory(name=SHM_NAME)
-            temp_shm.close()
+            temp_shm = shared_memory.SharedMemory(name=shm_name)
             temp_shm.unlink()
-            print(f"[Python] Cleaned up existing shared memory '{SHM_NAME}'")
         except FileNotFoundError:
             pass
 
-        shm = shared_memory.SharedMemory(name=SHM_NAME, create=True, size=SHM_SIZE)
-        print(f"[Python] Created shared memory '{SHM_NAME}' (Size: {SHM_SIZE} bytes)")
+        shm = shared_memory.SharedMemory(name=shm_name, create=True, size=shm_size)
+        print(f"[Python] Created shared memory '{shm_name}'")
 
-        # Write a dummy register value at offset 0 (4 bytes)
-        # 0x12345678 in little-endian
-        val = 0x12345678
-        shm.buf[0:4] = struct.pack("<I", val)
-        print(f"[Python] Wrote value 0x{val:08X} to offset 0x00")
-
-        print("[Python] Controller is running. Press Ctrl+C to stop.")
-        last_val = 0
+        print("[Python] Backend is ready. Logic is handled by Verilator/RTL.")
+        print("[Python] Press Ctrl+C to stop.")
+        
         while True:
-            # Read value at offset 4 (4 bytes)
-            current_val = struct.unpack("<I", shm.buf[4:8])[0]
-            if current_val != last_val:
-                print(f"[Python] Register Change Detected at offset 0x04: 0x{current_val:08X}")
-                last_val = current_val
-            
-            time.sleep(0.1)
+            time.sleep(1)
             
     except KeyboardInterrupt:
         print("\n[Python] Stopping Controller...")
     finally:
         shm.close()
         shm.unlink()
-        print("[Python] Shared memory cleaned up.")
 
 if __name__ == "__main__":
     main()

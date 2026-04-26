@@ -20,11 +20,11 @@ Linuxのシステムコール・フッキング技術を用いてハードウェ
 
 | コンポーネント | プロジェクト内での役割 | 実機での相当品 | 物理実体 (コード/パス) |
 | :--- | :--- | :--- | :--- |
-| **インターセプト・シム** | システムコールを横取りする「窓口」 | **Linux カーネル・ドライバ** | `libfpgashim.so` |
-| **RTL シミュレーション** | 回路ロジックを実行する「実体」 | **FPGA PL (回路)** | `obj_dir/Vcounter` |
-| **バックエンド管理** | 共有メモリを確保し全体を繋ぐ | **AXI Bus / メモリマップ** | `vlogic_controller.py` |
+| **インターセプト・シム** | システムコールを横取りする「窓口」 | **Linux カーネル・ドライバ** | `libfpgashim.c` (DTSより自動生成) |
+| **RTL シミュレーション** | 回路ロジックを実行する「実体」 | **FPGA PL (回路)** | `vfpga_top.v` (DTSより自動生成) |
+| **バックエンド管理** | 共有メモリを確保し全体を繋ぐ | **AXI Bus / メモリマップ** | `vlogic_controller.py` (DTS駆動) |
 | **ダッシュボード** | レジスタの状態を可視化する | **JTAG / ロジックアナライザ** | `dashboard_server.py` |
-| **ビルド・テスト環境** | アプリの構築と動作検証 | **SDK / 評価ボード** | `Makefile`, `tests/` |
+| **ビルド・テスト環境** | アプリの構築と動作検証 | **SDK / 評価ボード** | `Makefile`, `tests/run_tests.sh` |
 
 ### 3.2. アーキテクチャ図 (Visual Overview)
 
@@ -56,8 +56,9 @@ graph TD
 ### 4.1. Syscall Interceptor Layer (Shim)
 - **責務:** アプリケーションが発行するデバイスアクセス（`open`, `ioctl`, `mmap`）を [LD_PRELOAD](LD_PRELOAD.md) でインターセプトし、仮想デバイスへリダイレクトする。
 - **現状:** `/dev/fpga*`, `/dev/uio*`, `/dev/i2c-*` をトラップし、共有メモリまたはダミーデバイスへ誘導済み。
-- **生成:** `tests/vfpga_config.dts` をソースとし、`scripts/gen_shim.py` により自動生成される。
-- **意義:** Device Tree Source (FPGAのレジスタアドレスや割り込み番号等の定義) を用いたLinuxの再ビルドを必要とせず、かつアプリケーションのソースコードを一切変更せずに、FPGAの挙動をシミュレーションできる。
+- **生成:** `tests/vfpga_config.dts` をソースとし、`scripts/gen_vfpga.py` により自動生成される。
+- **原則:** Device Tree Source (FPGAのレジスタアドレスや定義) を唯一の真実 (Source of Truth) とし、Shim (Cコード) と RTL (Verilog) の一貫性を自動的に担保する。
+- **意義:** 実機の再ビルドを必要とせず、かつアプリケーションのソースコードを一切変更せずに、FPGAの挙動をシミュレーションできる。
 
 
 ### 4.2. Shared Memory Register Emulator (Virtual Logic Space)
@@ -67,8 +68,9 @@ graph TD
 - **責務:** 共有メモリ内のレジスタ状態をリアルタイムで監視・可視化する。
 - **意義:** 実機のデバッガを繋ぐことなく、ブラウザ（Port: 5000）から内部状態を把握できる。
 
-### 4.4. RTL-C++ Integrated Bridge ([Verilator](verilator.md) Interface)
+### 4.4. RTL-C++ Integrated Bridge (Verilator Interface)
 - **責務:** HDL論理を [Verilator](verilator.md) で高速な C++ モデルとして実行し、共有メモリの特定オフセットと信号を同期させる。
+- **生成:** DTS の `registers` 定義に基づき、バス・インターフェースを備えた Verilog スケルトン (`vfpga_top.v`) が自動生成される。
 
 ---
 

@@ -35,9 +35,14 @@
 - **2026-04-25: 共有メモリによるレジスタ再現**
     - **Decision:** /dev/shm を使用したレジスタ空間の共有。
     - **Rationale:** 通信速度の最大化と、Python等からの容易なアクセスを実現するため。
-- **2026-04-26: DTS 駆動による Shim 自動生成の採用**
-    - **Decision:** `./tests/vfpga_config.dts` を入力とし、`libfpgashim.c` をビルド時に自動生成する。
-    - **Rationale:** 実機開発における「設計図」である Device Tree をエミュレーション環境の構成定義として直接利用することで、実機構成との完全な同期を担保する。また、Shim 実装の詳細（フックのボイラープレート等）を自動化し、エンジニアが「デバイス構成」の定義に集中できるようにするため。
+- **2026-04-26: DTS 駆動による Shim / RTL 自動生成の採用**
+    - **Decision:** `./tests/vfpga_config.dts` を唯一の正解 (Source of Truth) とし、`libfpgashim.c` (Cコード) と `vfpga_top.v` (Verilog) を一括生成する。
+    - **Rationale:** 
+        1. 実機構成との完全同期: ソフトウェアとハードウェアのインターフェースを一箇所（DTS）で定義し、ボイラープレートを自動化することで不一致を排除する。
+        2. 職務分担の明確化: Pythonを「汎用インフラ」に徹させ、ロジックをVerilog(RTL)に移譲することで、FPGAエンジニアとFWエンジニアのドメイン境界を尊重する。
+- **2026-04-26: ハードウェア透過型テストランナーの導入**
+    - **Decision:** `tests/run_tests.sh` によるビルド・実行・クリーンアップの自動化。
+    - **Rationale:** アプリケーションコードにラボ環境のヘッダを一切含めない（純粋な標準パスのみを使用する）設計を強制し、spec.md 4.1節の「ソースコードを一切変更しない」という原則を CI/CD レベルで担保するため。
 
 ### 3. AIとの協調に関する指針 (AI Collaboration Policy)
 - **未知の問題への対処:** 憲章にないデバイス（SPI, UART等）の追加が必要になった際、AIは既存のI2Cエミュレーションのパターンを継承し、複数のインターセプト案を提示すること。
@@ -48,7 +53,7 @@
 <!--
 ### 4.1. Interceptor Shim (libfpgashim.so)
 - **責務:** libcの open, mmap, ioctl をラップし、/dev/uio* へのアクセスを検知して仮想共有メモリへ橋渡しする。
-- **生成方式:** `tests/*.dts` をソースとし、`scripts/gen_shim.py` によって自動生成される。直接編集は禁止。
+- **生成方式:** `tests/*.dts` をソースとし、`scripts/gen_vfpga.py` によって自動生成される。直接編集は禁止。
 - **提供するAPI:** 
     - int open(const char *pathname, int flags, ...)
     - void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)

@@ -22,6 +22,7 @@ Thumbs.db
 *.elf
 obj_dir/
 src/shim/libfpgashim.c
+src/rtl/vfpga_top.v
 
 # CIP
 DESIGN_PHILOSOPHY.md

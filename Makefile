@@ -1,38 +1,35 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -fPIC
+CFLAGS = -Wall -Wextra -fPIC -Isrc/include
 LDFLAGS = -shared -ldl
 
 SHIM_SRC = src/shim/libfpgashim.c
 SHIM_OUT = libfpgashim.so
 DTS_SRC = tests/vfpga_config.dts
-GEN_SCRIPT = scripts/gen_shim.py
+GEN_SCRIPT = scripts/gen_vfpga.py
+RTL_TOP = src/rtl/vfpga_top.v
 
+# ... (keep tests as is)
 TEST_SRC = tests/test_open.c
 TEST_OUT = tests/test_open
-
 TEST_SHM_SRC = tests/test_shm.c
 TEST_SHM_OUT = tests/test_shm
-
 TEST_REG_SRC = tests/test_reg_access.c
 TEST_REG_OUT = tests/test_reg_access
-
 TEST_I2C_SRC = tests/test_i2c.c
 TEST_I2C_OUT = tests/test_i2c
-
 TEST_VER_SRC = tests/test_verilator.c
 TEST_VER_OUT = tests/test_verilator
 
 # Verilator
 VERILATOR = verilator
-VERILATOR_FLAGS = -Wall --cc --exe
-RTL_SRC = src/rtl/counter.v
+VERILATOR_FLAGS = -Wall --cc --exe -CFLAGS "-I../src/include"
 SIM_SRC = src/sim/counter_sim.cpp
-SIM_OUT = obj_dir/Vcounter
+SIM_OUT = obj_dir/Vvfpga_top
 
 all: $(SHIM_OUT) $(TEST_OUT) $(TEST_SHM_OUT) $(TEST_REG_OUT) $(TEST_I2C_OUT) $(TEST_VER_OUT) verilate
 
-$(SHIM_SRC): $(DTS_SRC) $(GEN_SCRIPT)
-	python3 $(GEN_SCRIPT) $(DTS_SRC) $(SHIM_SRC)
+$(SHIM_SRC) $(RTL_TOP): $(DTS_SRC) $(GEN_SCRIPT)
+	python3 $(GEN_SCRIPT) $(DTS_SRC)
 
 $(SHIM_OUT): $(SHIM_SRC)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
@@ -52,15 +49,15 @@ $(TEST_I2C_OUT): $(TEST_I2C_SRC)
 $(TEST_VER_OUT): $(TEST_VER_SRC)
 	$(CC) $(CFLAGS) -o $@ $<
 
-$(SIM_OUT): $(RTL_SRC) $(SIM_SRC)
-	$(VERILATOR) $(VERILATOR_FLAGS) $(RTL_SRC) $(SIM_SRC)
-	$(MAKE) -C obj_dir -f Vcounter.mk
+$(SIM_OUT): $(RTL_TOP) $(SIM_SRC)
+	$(VERILATOR) $(VERILATOR_FLAGS) $(RTL_TOP) $(SIM_SRC)
+	$(MAKE) -C obj_dir -f Vvfpga_top.mk
 
 verilate: $(SIM_OUT)
 
 clean:
 	rm -f $(SHIM_OUT) $(TEST_OUT) $(TEST_SHM_OUT) $(TEST_REG_OUT) $(TEST_I2C_OUT) $(TEST_VER_OUT)
-	rm -f $(SHIM_SRC)
+	rm -f $(SHIM_SRC) $(RTL_TOP)
 	rm -rf obj_dir
 
 .PHONY: all clean verilate
