@@ -26,24 +26,26 @@ def parse_dts(dts_path):
                 v = v[1:-1].strip()
             props[k] = v
         
-        if 'label' in props:
+        if 'compatible' in props:
             compatible = props.get('compatible', '')
-            node_type = 'uio'
+            label = props.get('label', f"/dev/{name}")
+            
+            node_type = 'unknown'
             if 'generic-uio' in compatible:
                 node_type = 'uio'
             elif 'i2c' in compatible or 'cdns,i2c' in compatible:
                 node_type = 'i2c'
-            elif 'uart' in compatible or 'xlnx,xps-uart' in compatible or 'tty' in props['label']:
+            elif 'uart' in compatible or 'xlnx,xps-uart' in compatible:
                 node_type = 'uart'
                 
             node = {
                 'name': name,
-                'path': props['label'],
+                'path': label,
                 'type': node_type,
                 'reg': props.get('reg', '0x0 0x0'),
                 'registers': []
             }
-            # Add all other props EXCEPT those already handled specially
+            # Add all other props
             for k, v in props.items():
                 if k not in ['label', 'compatible', 'reg', 'registers']:
                     node[k] = v
@@ -262,13 +264,15 @@ int ioctl(int fd, unsigned long request, ...) {{
 
 def generate_rtl_v(nodes):
     target_node = next((n for n in nodes if n['type'] == 'uio' and n['registers']), None)
-    if not target_node:
-        return ""
-
+    
     reg_port_list = []
-    for reg in target_node['registers']:
-        reg_port_list.append(f"    output reg [31:0] {reg['name']}")
-    reg_ports = ",\n".join(reg_port_list)
+    if target_node:
+        for reg in target_node['registers']:
+            reg_port_list.append(f"    output reg [31:0] {reg['name']}")
+    
+    reg_ports = ""
+    if reg_port_list:
+        reg_ports = ",\n" + ",\n".join(reg_port_list)
 
     template = f"""
 /* Auto-generated RTL Skeleton from DTS */
@@ -278,28 +282,27 @@ module vfpga_top (
     input wire [31:0] addr,
     input wire [31:0] w_data,
     input wire w_en,
-    output reg [31:0] r_data,
-    
-    // Register Ports
-    {reg_ports}
+    output reg [31:0] r_data{reg_ports}
 );
-
+"""
+    if target_node:
+        template += """
     // Write Logic
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
 """
-    for reg in target_node['registers']:
-        template += f"            {reg['name']} <= 32'h0;\n"
-    
-    template += """        end else if (w_en) begin
+        for reg in target_node['registers']:
+            template += f"            {reg['name']} <= 32'h0;\n"
+        
+        template += """        end else if (w_en) begin
             case (addr)
 """
-    for reg in target_node['registers']:
-        if reg['name'] in ['RST', 'EN']:
-            v_offset = reg['offset'].replace('0x', "32'h")
-            template += f"                {v_offset}: {reg['name']} <= w_data;\n"
-    
-    template += """                default: ;
+        for reg in target_node['registers']:
+            if reg['name'] in ['RST', 'EN']:
+                v_offset = reg['offset'].replace('0x', "32'h")
+                template += f"                {v_offset}: {reg['name']} <= w_data;\n"
+        
+        template += """                default: ;
             endcase
         end
     end
@@ -308,23 +311,23 @@ module vfpga_top (
     always @(*) begin
         case (addr)
 """
-    for reg in target_node['registers']:
-        v_offset = reg['offset'].replace('0x', "32'h")
-        template += f"            {v_offset}: r_data = {reg['name']};\n"
-    
-    template += """            default: r_data = 32'hdeadbeef;
+        for reg in target_node['registers']:
+            v_offset = reg['offset'].replace('0x', "32'h")
+            template += f"            {v_offset}: r_data = {reg['name']};\n"
+        
+        template += """            default: r_data = 32'hdeadbeef;
         endcase
     end
-
-    // Example Logic: Counter
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n || RST[0]) begin
-            CNT <= 32'h0;
-        end else if (EN[0]) begin
-            CNT <= CNT + 1;
-        end
+"""
+    else:
+        template += """
+    // No registers defined in DTS.
+    always @(*) begin
+        r_data = 32'hdeadbeef;
     end
-
+"""
+    
+    template += """
 endmodule
 """
     return template
@@ -350,9 +353,9 @@ if __name__ == "__main__":
     with open("src/shim/libfpgashim.c", 'w') as f:
         f.write(shim_c)
     
-    # 3. Generate RTL
+    # 3. Generate RTL Skeleton
     rtl_v = generate_rtl_v(nodes)
     if rtl_v:
-        with open("src/rtl/vfpga_top.v", 'w') as f:
+        with open("src/rtl/vfpga_top_skeleton.v", 'w') as f:
             f.write(rtl_v)
-    print("Generated Config Header, Shim, and RTL from DTS.")
+    print("Generated Config Header, Shim, and RTL Skeleton from DTS.")

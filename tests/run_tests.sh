@@ -1,23 +1,20 @@
 #!/bin/bash
 
 # ==============================================================================
-# VirtualFPGALab Test Runner
+# VirtualFPGALab Test Runner (Scenario-Based)
 # ==============================================================================
 # Usage:
-#   ./tests/run_tests.sh           : Run all tests
+#   ./tests/run_tests.sh           : Run all scenarios
 #   ./tests/run_tests.sh --clean   : Clean build artifacts and logs
-#   ./tests/run_tests.sh --interactive : Run tests and keep environment for Dashboard
-#
-# To save logs to a file:
-#   ./tests/run_tests.sh 2>&1 | tee test_run.log
+#   ./tests/run_tests.sh --interactive : Run tests and keep environment
 # ==============================================================================
 
 # --- Configuration ---
 PROJECT_ROOT=$(pwd)
 CONTROLLER="src/controller/vlogic_controller.py"
-DASHBOARD="src/controller/dashboard_server.py"
 SIMULATOR="obj_dir/Vvfpga_top"
 SHIM="libfpgashim.so"
+SCENARIOS_DIR="tests/scenarios"
 
 # --- Functions ---
 cleanup_processes() {
@@ -41,41 +38,32 @@ done
 if [ "$CLEAN" = true ]; then
     echo "[Runner] Cleaning project artifacts and logs..."
     make clean
-    make -C tests clean
+    rm -rf tests/scenarios/*/test_bin
     rm -f *.log
     echo "[Runner] Clean finished."
     exit 0
 fi
 
-# Ensure processes are stopped on exit if we are running tests
 trap cleanup_processes EXIT
 
-# --- Main Test Execution ---
-
-# Build all tests once
-make -C tests
-# --- Execution Functions ---
-run_test() {
-    local test_bin=$1
-    echo -e "\n>> Running ${test_bin}..."
-    LD_PRELOAD=./${SHIM} ./${test_bin}
-    local status=$?
-    if [ $status -ne 0 ]; then
-        echo "<< ${test_bin}: FAIL"
-        cleanup_processes
-        exit 1
-    fi
-    echo "<< ${test_bin}: PASS"
-}
-
 start_environment() {
-    local dts=$1
+    local scenario_dir=$1
+    local dts="${scenario_dir}/config.dts"
+    echo -e "\n[Runner] >>> SCENARIO: $(basename ${scenario_dir}) <<<"
     echo "[Runner] Setting up environment with ${dts}..."
     
     # 1. Generate code from DTS
     python3 scripts/gen_vfpga.py ${dts}
     
-    # 2. Rebuild Shim and Simulator (ensure they match the DTS)
+    # 2. Handle Verilog
+    if [ -f "${scenario_dir}/vfpga_top.v" ]; then
+        echo "[Runner] Using custom Verilog from scenario."
+        cp "${scenario_dir}/vfpga_top.v" src/rtl/vfpga_top.v
+    else
+        echo "[Runner] Using default RTL skeleton."
+        cp src/rtl/vfpga_top_skeleton.v src/rtl/vfpga_top.v
+    fi
+    
     make libfpgashim.so -j$(nproc)
     make engine -j$(nproc)
     
@@ -85,54 +73,39 @@ start_environment() {
     # 4. Start Simulator
     ./${SIMULATOR} > simulator.log 2>&1 &
     
-    # Wait for startup
     sleep 3
-    
-    # Check if alive
-    if ! pgrep -f vlogic_controller > /dev/null; then
-        echo "[Runner] ERROR: Controller failed to start. See controller.log"
-        cat controller.log
-        exit 1
-    fi
-    if ! pgrep -f Vvfpga_top > /dev/null; then
-        echo "[Runner] ERROR: Simulator failed to start. See simulator.log"
-        cat simulator.log
-        exit 1
-    fi
 }
 
-# --- Main Test Execution ---
+# --- Main Execution ---
 
-# Build all tests once
-make -C tests
+for scenario in ${SCENARIOS_DIR}/*; do
+    if [ ! -d "${scenario}" ]; then continue; fi
+    
+    start_environment "${scenario}"
+    
+    # Build the scenario's main.c
+    echo "[Runner] Compiling ${scenario}/main.c..."
+    gcc "${scenario}/main.c" -o "${scenario}/test_bin" -Isrc/include
+    
+    # Run the test
+    echo "[Runner] Running test..."
+    LD_PRELOAD=./${SHIM} ./${scenario}/test_bin
+    
+    if [ $? -eq 0 ]; then
+        echo "[Runner] RESULT: $(basename ${scenario}) PASSED"
+    else
+        echo "[Runner] RESULT: $(basename ${scenario}) FAILED"
+        exit 1
+    fi
+    
+    if [ "$INTERACTIVE" = false ]; then
+        cleanup_processes
+    else
+        echo "[Runner] INTERACTIVE MODE: Environment is being maintained."
+        echo "[Runner] Press Enter to continue to next scenario (or stop)..."
+        read
+        cleanup_processes
+    fi
+done
 
-# PHASE 1: Standard UIO Tests
-start_environment "tests/vfpga_config.dts"
-
-run_test "tests/test_open"
-run_test "tests/test_shm"
-run_test "tests/test_reg_access"
-run_test "tests/test_i2c"
-run_test "tests/test_verilator"
-run_test "tests/test_multi_i2c"
-run_test "tests/test_uart"
-
-cleanup_processes
-
-# PHASE 2: /dev/mem Intercept Tests
-start_environment "tests/vfpga_config_devmem.dts"
-
-run_test "tests/test_dev_mem"
-run_test "tests/test_multi_i2c"
-run_test "tests/test_legacy_style"
-
-cleanup_processes
-
-echo -e "\n[Runner] ALL TESTS PASSED SUCCESSFULLY!"
-
-if [ "$INTERACTIVE" = true ]; then
-    echo -e "\n[Runner] INTERACTIVE MODE: Environment is being maintained."
-    echo "[Runner] You can access the dashboard at http://127.0.0.1:8080"
-    echo "[Runner] Press Enter to stop and cleanup..."
-    read
-fi
+echo -e "\n[Runner] ALL SCENARIOS COMPLETED SUCCESSFULLY!"

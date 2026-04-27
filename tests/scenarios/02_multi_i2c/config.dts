@@ -1,0 +1,17 @@
+/dts-v1/;
+
+/ {
+    i2c1: i2c@e0004000 {
+        compatible = "cdns,i2c-r1p10";
+        reg = <0xe0004000 0x1000>;
+        bus_id = <1>;
+        label = "/dev/i2c-1";
+    };
+
+    i2c2: i2c@e0005000 {
+        compatible = "cdns,i2c-r1p10";
+        reg = <0xe0005000 0x1000>;
+        bus_id = <2>;
+        label = "/dev/i2c-2";
+    };
+};

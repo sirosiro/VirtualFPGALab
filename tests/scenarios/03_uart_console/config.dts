@@ -1,0 +1,9 @@
+/dts-v1/;
+
+/ {
+    uart2: serial@e0001000 {
+        compatible = "xlnx,xps-uartlite-1.00.a";
+        reg = <0xe0001000 0x1000>;
+        label = "/dev/ttyPS2";
+    };
+};

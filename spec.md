@@ -1,7 +1,7 @@
 # Project: VirtualFPGALab Specification
 
 ## 1. プロジェクトの核心的意図 (Core Intent)
-本プロジェクトの目的は、Xilinx Zynq等のFPGA SoC開発において、物理的なボードへの依存を最小化し、ソフトウェア・エンジニアがWSL2環境でFPGAロジックを含めた開発・デバッグを完結させることにある。
+本プロジェクトの目的は、Xilinx Zynq等のFPGA SoC開発において、物理的なボードへの依存を最小化し、ソフトウェア・エンジニアがLinux環境でFPGAロジックを含めた開発・デバッグを完結させることにある。
 Linuxのシステムコール・フッキング技術を用いてハードウェアの振る舞いを抽象化し、「ハードウェアの完成を待ったり、高価な評価ボードを共有したりすることなく、ソフトウェアのロジック検証を回す」ことを究極の意図とする。
 
 ---
@@ -58,8 +58,8 @@ graph TD
 - **現状:** `/dev/fpga*`, `/dev/uio*`, `/dev/i2c-*`, `/dev/mem`, `/dev/ttyPS*` をトラップ。
 - **/dev/mem 対応:** 物理アドレスをキーとしたルーティングテーブルを持ち、`mmap` 時に適切な共有メモリへ自動でリダイレクトする。
 - **生成:** `tests/vfpga_config.dts` をソースとし、`scripts/gen_vfpga.py` により自動生成される。
-- **原則:** Device Tree Source (FPGAのレジスタアドレスや定義) を唯一の真実 (Source of Truth) とし、Shim (Cコード) と RTL (Verilog) の一貫性を自動的に担保する。
-- **意義:** 実機の再ビルドを必要とせず、かつアプリケーションのソースコードを一切変更せずに、FPGAの挙動をシミュレーションできる。
+- **原則:** Device Tree Source (FPGAのレジスタアドレスや定義) を唯一の真実 (Source Truth) とし、Shim (Cコード) と RTL (Verilog) の一貫性を自動的に担保する。
+- **意義:** FWアプリケーションのソースコードを一切変更することなく作成したelfを実機(評価ボード)で実行できる。
 
 
 ### 4.2. Shared Memory Register Emulator (Virtual Logic Space)
