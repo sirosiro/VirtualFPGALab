@@ -27,13 +27,27 @@ def parse_dts(dts_path):
             props[k] = v
         
         if 'label' in props:
+            compatible = props.get('compatible', '')
+            node_type = 'uio'
+            if 'generic-uio' in compatible:
+                node_type = 'uio'
+            elif 'i2c' in compatible or 'cdns,i2c' in compatible:
+                node_type = 'i2c'
+            elif 'uart' in compatible or 'xlnx,xps-uart' in compatible or 'tty' in props['label']:
+                node_type = 'uart'
+                
             node = {
                 'name': name,
                 'path': props['label'],
-                'type': 'uio' if 'generic-uio' in props.get('compatible', '') else 'i2c',
+                'type': node_type,
                 'reg': props.get('reg', '0x0 0x0'),
                 'registers': []
             }
+            # Add all other props EXCEPT those already handled specially
+            for k, v in props.items():
+                if k not in ['label', 'compatible', 'reg', 'registers']:
+                    node[k] = v
+            
             if 'registers' in props:
                 reg_list = props['registers'].split(',')
                 for r in reg_list:
@@ -65,11 +79,22 @@ def generate_config_h(nodes):
 def generate_shim_c(nodes):
     uio_matches = []
     i2c_matches = []
+    uart_matches = []
+    mmap_routes = []
     for node in nodes:
         if node['type'] == 'uio':
-            uio_matches.append(f'    if (pathname != NULL && strcmp(pathname, "{node["path"]}") == 0) return 1;')
-        else:
-            i2c_matches.append(f'    if (pathname != NULL && strcmp(pathname, "{node["path"]}") == 0) return 2;')
+            reg_parts = node['reg'].split()
+            if len(reg_parts) >= 2:
+                base_addr = reg_parts[0]
+                size = reg_parts[1]
+                mmap_routes.append(f'    {{ {base_addr}, {size}, "/{node["name"]}", "{node["path"]}" }}')
+        elif node['type'] == 'i2c':
+            bus_id = node.get('bus_id', '1')
+            i2c_matches.append(f'    if (pathname != NULL && strcmp(pathname, "{node["path"]}") == 0) return {bus_id};')
+        elif node['type'] == 'uart':
+            uart_matches.append(f'    if (pathname != NULL && strcmp(pathname, "{node["path"]}") == 0) return 1;')
+
+    routes_array = ",\n".join(mmap_routes)
 
     template = f"""
 #define _GNU_SOURCE
@@ -80,20 +105,50 @@ def generate_shim_c(nodes):
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <termios.h>
 #include <linux/i2c-dev.h>
 #include <linux/i2c.h>
 #include <sys/ioctl.h>
 #include "vfpga_config.h"
 
 #define MAX_FDS 1024
-static int is_virtual_fd[MAX_FDS] = {{0}};
+static int virtual_fd_route_idx[MAX_FDS] = {{0}}; // 0: not virtual, >0: route index + 1, -1: /dev/mem
 
 static int (*original_open)(const char *pathname, int flags, mode_t mode) = NULL;
 static int (*original_ioctl)(int fd, unsigned long request, void *argp) = NULL;
+static void* (*original_mmap)(void *addr, size_t length, int prot, int flags, int fd, off_t offset) = NULL;
 
-static int get_device_type(const char *pathname) {{
-{chr(10).join(uio_matches)}
+struct mmap_route {{
+    unsigned long base_addr;
+    unsigned long size;
+    const char *shm_name;
+    const char *path;
+}};
+
+static struct mmap_route routes[] = {{
+{routes_array}
+}};
+
+static int find_route_by_path(const char *pathname) {{
+    if (pathname == NULL) return 0;
+    if (strcmp(pathname, "/dev/mem") == 0) return -1;
+    for (int i = 0; i < sizeof(routes)/sizeof(routes[0]); i++) {{
+        if (strcmp(pathname, routes[i].path) == 0) return i + 1;
+    }}
+    return 0;
+}}
+
+static int is_i2c_device(const char *pathname) {{
+    if (pathname == NULL) return 0;
 {chr(10).join(i2c_matches)}
+    return 0;
+}}
+
+static int is_uart_device(const char *pathname) {{
+    if (pathname == NULL) return 0;
+{chr(10).join(uart_matches)}
     return 0;
 }}
 
@@ -106,18 +161,78 @@ int open(const char *pathname, int flags, ...) {{
         va_end(arg);
     }}
     if (!original_open) original_open = dlsym(RTLD_NEXT, "open");
-    int type = get_device_type(pathname);
-    if (type == 1) {{
-        int fd = shm_open(SHM_NAME, flags, mode);
-        if (fd != -1 && fd < MAX_FDS) is_virtual_fd[fd] = 1;
-        return fd;
-    }}
-    if (type == 2) {{
+    
+    int route_idx = find_route_by_path(pathname);
+    if (route_idx != 0) {{
         int fd = original_open("/dev/null", flags, mode);
-        if (fd != -1 && fd < MAX_FDS) is_virtual_fd[fd] = 2;
+        if (fd != -1 && fd < MAX_FDS) virtual_fd_route_idx[fd] = route_idx;
         return fd;
     }}
+    
+    int i2c_bus_id = is_i2c_device(pathname);
+    if (i2c_bus_id != 0) {{
+        int fd = original_open("/dev/null", flags, mode);
+        if (fd != -1 && fd < MAX_FDS) virtual_fd_route_idx[fd] = -100 - i2c_bus_id;
+        return fd;
+    }}
+
+    if (is_uart_device(pathname)) {{
+        // Create a Pseudo-Terminal (PTY)
+        int master_fd = posix_openpt(O_RDWR | O_NOCTTY);
+        if (master_fd != -1) {{
+            grantpt(master_fd);
+            unlockpt(master_fd);
+            char *pts_name = ptsname(master_fd);
+            fprintf(stderr, "[Shim] UART MAP: %s -> %s\\n", pathname, pts_name);
+            
+            // Write mapping to a file for the controller to discover
+            char filename[256];
+            const char *leaf = strrchr(pathname, '/');
+            sprintf(filename, "/tmp/vfpga_uart_%s", leaf ? leaf + 1 : pathname);
+            FILE *f = fopen(filename, "w");
+            if (f) {{
+                fprintf(f, "%s", pts_name);
+                fclose(f);
+            }}
+            
+            if (master_fd < MAX_FDS) virtual_fd_route_idx[master_fd] = -200; // Marker for UART
+        }}
+        return master_fd;
+    }}
+    
     return original_open(pathname, flags, mode);
+}}
+
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {{
+    if (!original_mmap) original_mmap = dlsym(RTLD_NEXT, "mmap");
+
+    if (fd >= 0 && fd < MAX_FDS && virtual_fd_route_idx[fd] != 0) {{
+        int route_idx = virtual_fd_route_idx[fd];
+        int target_idx = -1;
+
+        if (route_idx == -1) {{
+            // /dev/mem: Search by physical address (offset)
+            for (int i = 0; i < sizeof(routes)/sizeof(routes[0]); i++) {{
+                if (offset >= routes[i].base_addr && offset < (routes[i].base_addr + routes[i].size)) {{
+                    target_idx = i;
+                    offset -= routes[i].base_addr;
+                    break;
+                }}
+            }}
+        }} else if (route_idx > 0) {{
+            // Specific device (e.g. /dev/fpga0): Use fixed route
+            target_idx = route_idx - 1;
+        }}
+
+        if (target_idx != -1) {{
+            int shm_fd = shm_open(routes[target_idx].shm_name, O_RDWR, 0666);
+            if (shm_fd == -1) return MAP_FAILED;
+            void *res = original_mmap(addr, length, prot, flags, shm_fd, offset);
+            close(shm_fd);
+            return res;
+        }}
+    }}
+    return original_mmap(addr, length, prot, flags, fd, offset);
 }}
 
 int ioctl(int fd, unsigned long request, ...) {{
@@ -126,12 +241,14 @@ int ioctl(int fd, unsigned long request, ...) {{
     void *argp = va_arg(args, void *);
     va_end(args);
     if (!original_ioctl) original_ioctl = dlsym(RTLD_NEXT, "ioctl");
-    if (fd >= 0 && fd < MAX_FDS && is_virtual_fd[fd] == 2) {{
+    if (fd >= 0 && fd < MAX_FDS && virtual_fd_route_idx[fd] <= -101) {{
+        int i2c_bus_id = -(virtual_fd_route_idx[fd] + 100);
         if (request == I2C_RDWR) {{
             struct i2c_rdwr_ioctl_data *data = (struct i2c_rdwr_ioctl_data *)argp;
             for (unsigned int i = 0; i < data->nmsgs; i++) {{
                 if (data->msgs[i].flags & I2C_M_RD) {{
-                    memset(data->msgs[i].buf, 0xAA, data->msgs[i].len);
+                    // Return dummy data based on bus_id to prove separation
+                    memset(data->msgs[i].buf, 0x10 * i2c_bus_id, data->msgs[i].len);
                 }}
             }}
             return 0;
@@ -219,6 +336,8 @@ if __name__ == "__main__":
     
     dts_path = sys.argv[1]
     nodes = parse_dts(dts_path)
+    for node in nodes:
+        print(f"[Gen] Found node: {node['name']}, path: {node['path']}, bus_id: {node.get('bus_id', 'N/A')}")
     
     # 1. Generate Config Header
     config_h = generate_config_h(nodes)

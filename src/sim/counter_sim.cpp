@@ -18,9 +18,16 @@ int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     Vvfpga_top* top = new Vvfpga_top;
 
-    int fd = shm_open(SHM_NAME, O_RDWR, 0666);
+    int fd = -1;
+    for (int i = 0; i < 10; i++) {
+        fd = shm_open(SHM_NAME, O_RDWR, 0666);
+        if (fd != -1) break;
+        std::cout << "[Sim] Waiting for shared memory '" << SHM_NAME << "'..." << std::endl;
+        sleep(1);
+    }
+
     if (fd == -1) {
-        std::cerr << "[Sim] shm_open failed. Run vlogic_controller.py first." << std::endl;
+        std::cerr << "[Sim] shm_open failed after retries. Run vlogic_controller.py first." << std::endl;
         return 1;
     }
 

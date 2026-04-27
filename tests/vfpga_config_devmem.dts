@@ -1,11 +1,11 @@
 /dts-v1/;
 
 / {
-    /* Standard node using /dev/fpga0 */
+    /* Node using /dev/mem to access FPGA registers */
     vfpga_reg@40000000 {
         compatible = "generic-uio";
         reg = <0x40000000 0x1000>;
-        label = "/dev/fpga0";
+        label = "/dev/mem";
         
         registers = 
             "RST @ 0x10",

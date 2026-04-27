@@ -50,55 +50,83 @@ fi
 # Ensure processes are stopped on exit if we are running tests
 trap cleanup_processes EXIT
 
-# --- Execution ---
-echo "[Runner] Building engine..."
-make -j$(nproc) || exit 1
-echo "[Runner] Building tests..."
-make -C tests -j$(nproc) || exit 1
+# --- Main Test Execution ---
 
-echo "[Runner] Starting Backend (vlogic_controller.py)..."
-python3 $CONTROLLER &
-sleep 2
-
-echo "[Runner] Starting Simulator (Vvfpga_top)..."
-./$SIMULATOR &
-sleep 2
-
-if [ "$INTERACTIVE" = true ]; then
-    echo "[Runner] Starting Dashboard (dashboard_server.py) on port 8080..."
-    python3 $DASHBOARD &
-    sleep 2
-    echo "[Runner] Dashboard is ready at http://127.0.0.1:8080"
-fi
-
-# Check if background processes are alive
-if ! pgrep -f vlogic_controller > /dev/null; then
-    echo "[Runner] ERROR: Backend failed to start."
-    exit 1
-fi
-
-# --- Run Tests ---
-echo "[Runner] Starting test suite..."
-
-export LD_PRELOAD=./$SHIM
-
+# Build all tests once
+make -C tests
+# --- Execution Functions ---
 run_test() {
     local test_bin=$1
-    echo -e "\n>> Running $test_bin..."
-    ./$test_bin
-    if [ $? -eq 0 ]; then
-        echo "<< $test_bin: PASS"
-    else
-        echo "<< $test_bin: FAIL"
+    echo -e "\n>> Running ${test_bin}..."
+    LD_PRELOAD=./${SHIM} ./${test_bin}
+    local status=$?
+    if [ $status -ne 0 ]; then
+        echo "<< ${test_bin}: FAIL"
+        cleanup_processes
+        exit 1
+    fi
+    echo "<< ${test_bin}: PASS"
+}
+
+start_environment() {
+    local dts=$1
+    echo "[Runner] Setting up environment with ${dts}..."
+    
+    # 1. Generate code from DTS
+    python3 scripts/gen_vfpga.py ${dts}
+    
+    # 2. Rebuild Shim and Simulator (ensure they match the DTS)
+    make libfpgashim.so -j$(nproc)
+    make engine -j$(nproc)
+    
+    # 3. Start Controller
+    python3 -u ${CONTROLLER} ${dts} > controller.log 2>&1 &
+    
+    # 4. Start Simulator
+    ./${SIMULATOR} > simulator.log 2>&1 &
+    
+    # Wait for startup
+    sleep 3
+    
+    # Check if alive
+    if ! pgrep -f vlogic_controller > /dev/null; then
+        echo "[Runner] ERROR: Controller failed to start. See controller.log"
+        cat controller.log
+        exit 1
+    fi
+    if ! pgrep -f Vvfpga_top > /dev/null; then
+        echo "[Runner] ERROR: Simulator failed to start. See simulator.log"
+        cat simulator.log
         exit 1
     fi
 }
+
+# --- Main Test Execution ---
+
+# Build all tests once
+make -C tests
+
+# PHASE 1: Standard UIO Tests
+start_environment "tests/vfpga_config.dts"
 
 run_test "tests/test_open"
 run_test "tests/test_shm"
 run_test "tests/test_reg_access"
 run_test "tests/test_i2c"
 run_test "tests/test_verilator"
+run_test "tests/test_multi_i2c"
+run_test "tests/test_uart"
+
+cleanup_processes
+
+# PHASE 2: /dev/mem Intercept Tests
+start_environment "tests/vfpga_config_devmem.dts"
+
+run_test "tests/test_dev_mem"
+run_test "tests/test_multi_i2c"
+run_test "tests/test_legacy_style"
+
+cleanup_processes
 
 echo -e "\n[Runner] ALL TESTS PASSED SUCCESSFULLY!"
 
