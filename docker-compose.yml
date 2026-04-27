@@ -1,0 +1,18 @@
+services:
+  lab:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - .:/workspace
+    ports:
+      - "8080:8080"
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    shm_size: '512mb'
+    tty: true
+    stdin_open: true
+    working_dir: /workspace
+    command: /bin/bash -c "./tests/run_tests.sh --interactive"

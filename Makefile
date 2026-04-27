@@ -60,4 +60,10 @@ clean:
 	rm -f $(SHIM_SRC) $(RTL_TOP)
 	rm -rf obj_dir
 
-.PHONY: all clean verilate
+.PHONY: all clean verilate docker-up docker-down
+
+docker-up:
+	docker compose up --build
+
+docker-down:
+	docker compose down

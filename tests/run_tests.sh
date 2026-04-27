@@ -65,7 +65,7 @@ if [ "$INTERACTIVE" = true ]; then
     echo "[Runner] Starting Dashboard (dashboard_server.py) on port 8080..."
     python3 $DASHBOARD &
     sleep 2
-    echo "[Runner] Dashboard is ready at http://localhost:8080"
+    echo "[Runner] Dashboard is ready at http://127.0.0.1:8080"
 fi
 
 # Check if background processes are alive
@@ -101,7 +101,7 @@ echo -e "\n[Runner] ALL TESTS PASSED SUCCESSFULLY!"
 
 if [ "$INTERACTIVE" = true ]; then
     echo -e "\n[Runner] INTERACTIVE MODE: Environment is being maintained."
-    echo "[Runner] You can access the dashboard at http://localhost:8080"
+    echo "[Runner] You can access the dashboard at http://127.0.0.1:8080"
     echo "[Runner] Press Enter to stop and cleanup..."
     read
 fi

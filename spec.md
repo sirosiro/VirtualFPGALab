@@ -66,7 +66,7 @@ graph TD
 
 ### 4.3. Logic Visualization & Diagnostic Tool (The Dashboard)
 - **責務:** 共有メモリ内のレジスタ状態をリアルタイムで監視・可視化する。
-- **アクセス:** `python3 src/controller/dashboard_server.py` を起動し、ブラウザから **`http://localhost:8080`** へアクセスする（VS Code 環境では自動的にポート転送される）。
+- **アクセス:** `python3 src/controller/dashboard_server.py` を起動し、ブラウザから **`http://127.0.0.1:8080`** へアクセスする（VS Code 環境では自動的にポート転送される）。
 - **意義:** 実機のデバッガを繋ぐことなく、ブラウザから内部状態を把握できる。
 
 ### 4.4. RTL-C++ Integrated Bridge (Verilator Interface)

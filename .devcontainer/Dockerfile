@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     gdb \
     strace \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Verilator
@@ -31,7 +32,9 @@ RUN pip3 install --no-cache-dir \
     numpy \
     pandas \
     matplotlib \
-    pytest
+    pytest \
+    flask \
+    flask-cors
 
 # Set workspace directory
 WORKDIR /workspace
