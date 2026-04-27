@@ -4,21 +4,11 @@ LDFLAGS = -shared -ldl
 
 SHIM_SRC = src/shim/libfpgashim.c
 SHIM_OUT = libfpgashim.so
-DTS_SRC = tests/vfpga_config.dts
 GEN_SCRIPT = scripts/gen_vfpga.py
 RTL_TOP = src/rtl/vfpga_top.v
 
-# ... (keep tests as is)
-TEST_SRC = tests/test_open.c
-TEST_OUT = tests/test_open
-TEST_SHM_SRC = tests/test_shm.c
-TEST_SHM_OUT = tests/test_shm
-TEST_REG_SRC = tests/test_reg_access.c
-TEST_REG_OUT = tests/test_reg_access
-TEST_I2C_SRC = tests/test_i2c.c
-TEST_I2C_OUT = tests/test_i2c
-TEST_VER_SRC = tests/test_verilator.c
-TEST_VER_OUT = tests/test_verilator
+# Configuration (Defaults to tests/vfpga_config.dts)
+CONFIG ?= tests/vfpga_config.dts
 
 # Verilator
 VERILATOR = verilator
@@ -26,44 +16,35 @@ VERILATOR_FLAGS = -Wall --cc --exe -CFLAGS "-I../src/include"
 SIM_SRC = src/sim/counter_sim.cpp
 SIM_OUT = obj_dir/Vvfpga_top
 
-all: $(SHIM_OUT) $(TEST_OUT) $(TEST_SHM_OUT) $(TEST_REG_OUT) $(TEST_I2C_OUT) $(TEST_VER_OUT) verilate
+all: engine
 
-$(SHIM_SRC) $(RTL_TOP): $(DTS_SRC) $(GEN_SCRIPT)
-	python3 $(GEN_SCRIPT) $(DTS_SRC)
+# Generate Shim, Header, and RTL from the selected DTS
+$(SHIM_SRC) $(RTL_TOP) src/include/vfpga_config.h: $(CONFIG) $(GEN_SCRIPT)
+	python3 $(GEN_SCRIPT) $(CONFIG)
 
+# Build the Interception Shim
 $(SHIM_OUT): $(SHIM_SRC)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
-$(TEST_OUT): $(TEST_SRC)
-	$(CC) $(CFLAGS) -o $@ $<
-
-$(TEST_SHM_OUT): tests/test_shm.c
-	$(CC) $(CFLAGS) -o $@ $< -lrt
-
-$(TEST_REG_OUT): $(TEST_REG_SRC)
-	$(CC) $(CFLAGS) -o $@ $<
-
-$(TEST_I2C_OUT): $(TEST_I2C_SRC)
-	$(CC) $(CFLAGS) -o $@ $<
-
-$(TEST_VER_OUT): $(TEST_VER_SRC)
-	$(CC) $(CFLAGS) -o $@ $<
-
+# Build the Verilator Simulator
 $(SIM_OUT): $(RTL_TOP) $(SIM_SRC)
 	$(VERILATOR) $(VERILATOR_FLAGS) $(RTL_TOP) $(SIM_SRC)
 	$(MAKE) -C obj_dir -f Vvfpga_top.mk
 
-verilate: $(SIM_OUT)
+engine: $(SHIM_OUT) $(SIM_OUT)
 
 clean:
-	rm -f $(SHIM_OUT) $(TEST_OUT) $(TEST_SHM_OUT) $(TEST_REG_OUT) $(TEST_I2C_OUT) $(TEST_VER_OUT)
-	rm -f $(SHIM_SRC) $(RTL_TOP)
+	rm -f $(SHIM_OUT)
+	rm -f $(SHIM_SRC) $(RTL_TOP) src/include/vfpga_config.h
 	rm -rf obj_dir
+	$(MAKE) -C tests clean || true
+	$(MAKE) -C sandbox clean || true
 
-.PHONY: all clean verilate docker-up docker-down
-
+# Helper for Docker
 docker-up:
 	docker compose up --build
 
 docker-down:
 	docker compose down
+
+.PHONY: all engine clean verilate docker-up docker-down

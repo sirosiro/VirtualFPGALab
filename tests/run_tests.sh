@@ -41,6 +41,7 @@ done
 if [ "$CLEAN" = true ]; then
     echo "[Runner] Cleaning project artifacts and logs..."
     make clean
+    make -C tests clean
     rm -f *.log
     echo "[Runner] Clean finished."
     exit 0
@@ -50,8 +51,10 @@ fi
 trap cleanup_processes EXIT
 
 # --- Execution ---
-echo "[Runner] Building project..."
+echo "[Runner] Building engine..."
 make -j$(nproc) || exit 1
+echo "[Runner] Building tests..."
+make -C tests -j$(nproc) || exit 1
 
 echo "[Runner] Starting Backend (vlogic_controller.py)..."
 python3 $CONTROLLER &

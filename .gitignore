@@ -26,3 +26,6 @@ src/rtl/vfpga_top.v
 # CIP
 DESIGN_PHILOSOPHY.md
 
+# Test
+/sandbox/*
+!/sandbox/.gitkeep
