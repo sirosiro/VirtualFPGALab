@@ -1,5 +1,8 @@
 #!/bin/bash
 
+export LC_ALL=C
+export LANG=C
+
 # ==============================================================================
 # VirtualFPGALab Test Runner (Scenario-Based)
 # ==============================================================================
@@ -64,8 +67,8 @@ start_environment() {
         cp src/rtl/vfpga_top_skeleton.v src/rtl/vfpga_top.v
     fi
     
-    make libfpgashim.so -j$(nproc)
-    make engine -j$(nproc)
+    make libfpgashim.so -j$(nproc) || exit 1
+    make engine -j$(nproc) || exit 1
     
     # 3. Start Controller
     python3 -u ${CONTROLLER} ${dts} > controller.log 2>&1 &
@@ -85,7 +88,7 @@ for scenario in ${SCENARIOS_DIR}/*; do
     
     # Build the scenario's main.c
     echo "[Runner] Compiling ${scenario}/main.c..."
-    gcc "${scenario}/main.c" -o "${scenario}/test_bin" -Isrc/include
+    gcc "${scenario}/main.c" -o "${scenario}/test_bin" -Isrc/include || exit 1
     
     # Run the test
     echo "[Runner] Running test..."

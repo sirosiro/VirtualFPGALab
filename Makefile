@@ -10,7 +10,7 @@ RTL_TOP = src/rtl/vfpga_top.v
 # Verilator
 VERILATOR = verilator
 VERILATOR_FLAGS = -Wall --cc --exe -CFLAGS "-I../src/include"
-SIM_SRC = src/sim/counter_sim.cpp
+SIM_SRC = src/sim/sim_main.cpp
 SIM_OUT = obj_dir/Vvfpga_top
 
 all: engine

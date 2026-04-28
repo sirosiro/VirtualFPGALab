@@ -22,6 +22,10 @@ Thumbs.db
 obj_dir/
 src/shim/libfpgashim.c
 src/rtl/vfpga_top.v
+src/rtl/vfpga_top_skeleton.v
+src/include/vfpga_config.h
+src/sim/sim_main.cpp
+tests/scenarios/*/test_bin
 
 # CIP
 DESIGN_PHILOSOPHY.md

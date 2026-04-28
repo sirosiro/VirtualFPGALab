@@ -1,5 +1,6 @@
 
 /* Auto-generated RTL Skeleton from DTS */
+/* verilator lint_off UNUSED */
 module vfpga_top (
     input wire clk,
     input wire rst_n,

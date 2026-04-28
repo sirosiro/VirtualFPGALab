@@ -136,7 +136,8 @@ static struct mmap_route routes[] = {{
 static int find_route_by_path(const char *pathname) {{
     if (pathname == NULL) return 0;
     if (strcmp(pathname, "/dev/mem") == 0) return -1;
-    for (int i = 0; i < sizeof(routes)/sizeof(routes[0]); i++) {{
+    int num_routes = sizeof(routes)/sizeof(routes[0]);
+    for (int i = 0; i < num_routes; i++) {{
         if (strcmp(pathname, routes[i].path) == 0) return i + 1;
     }}
     return 0;
@@ -214,10 +215,11 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 
         if (route_idx == -1) {{
             // /dev/mem: Search by physical address (offset)
-            for (int i = 0; i < sizeof(routes)/sizeof(routes[0]); i++) {{
-                if (offset >= routes[i].base_addr && offset < (routes[i].base_addr + routes[i].size)) {{
-                    target_idx = i;
-                    offset -= routes[i].base_addr;
+            int num_routes = sizeof(routes)/sizeof(routes[0]);
+            for (int i = 0; i < num_routes; i++) {{
+                if ((unsigned long)offset >= routes[i].base_addr && (unsigned long)offset < (routes[i].base_addr + routes[i].size)) {{
+                    target_idx = (int)i;
+                    offset -= (off_t)routes[i].base_addr;
                     break;
                 }}
             }}
@@ -276,6 +278,7 @@ def generate_rtl_v(nodes):
 
     template = f"""
 /* Auto-generated RTL Skeleton from DTS */
+/* verilator lint_off UNUSED */
 module vfpga_top (
     input wire clk,
     input wire rst_n,
@@ -332,6 +335,109 @@ endmodule
 """
     return template
 
+def generate_sim_cpp(nodes):
+    target_node = next((n for n in nodes if n['type'] == 'uio' and n['registers']), None)
+    
+    offsets_str = "0"
+    num_regs = 0
+    if target_node:
+        offsets = [reg['offset'] for reg in target_node['registers']]
+        offsets_str = ", ".join(offsets)
+        num_regs = len(offsets)
+
+    template = f"""/* Auto-generated Verilator Wrapper from DTS */
+#include <iostream>
+#include <verilated.h>
+#include "Vvfpga_top.h"
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <string.h>
+
+#include "vfpga_config.h"
+
+int main(int argc, char** argv) {{
+    Verilated::commandArgs(argc, argv);
+    Vvfpga_top* top = new Vvfpga_top;
+
+    int fd = -1;
+    for (int i = 0; i < 10; i++) {{
+        fd = shm_open(SHM_NAME, O_RDWR, 0666);
+        if (fd != -1) break;
+        usleep(100000);
+    }}
+    if (fd == -1) return 1;
+
+    uint32_t* shm = (uint32_t*)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    uint32_t old_shm[SHM_SIZE/4];
+    memcpy(old_shm, shm, SHM_SIZE);
+
+    top->clk = 0;
+    top->rst_n = 1;
+    top->w_en = 0;
+
+    // Reset sequence
+    top->rst_n = 0;
+    top->eval();
+    top->clk = 1; top->eval();
+    top->clk = 0; top->eval();
+    top->rst_n = 1;
+
+    uint32_t offsets[] = {{{offsets_str}}};
+    int num_regs = {num_regs};
+
+    while (!Verilated::gotFinish()) {{
+        bool write_happened = false;
+        
+        if (num_regs > 0) {{
+            // 1. Detect Writes from Software
+            for (int i = 0; i < num_regs; i++) {{
+                uint32_t off = offsets[i] / 4;
+                if (shm[off] != old_shm[off]) {{
+                    top->addr = offsets[i];
+                    top->w_data = shm[off];
+                    top->w_en = 1;
+                    old_shm[off] = shm[off];
+                    write_happened = true;
+                    break;
+                }}
+            }}
+        }}
+        
+        if (!write_happened) {{
+            top->w_en = 0;
+        }}
+
+        // Clock High
+        top->clk = 1;
+        top->eval();
+
+        if (num_regs > 0) {{
+            // 2. Read values from RTL back to SHM
+            for (int i = 0; i < num_regs; i++) {{
+                top->addr = offsets[i];
+                top->eval();
+                uint32_t val = top->r_data;
+                shm[offsets[i] / 4] = val;
+                old_shm[offsets[i] / 4] = val;
+            }}
+        }}
+
+        // Clock Low
+        top->clk = 0;
+        top->eval();
+
+        usleep(10000); 
+    }}
+
+    top->final();
+    delete top;
+    return 0;
+}}
+"""
+    return template
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: gen_vfpga.py <dts_path>")
@@ -358,4 +464,10 @@ if __name__ == "__main__":
     if rtl_v:
         with open("src/rtl/vfpga_top_skeleton.v", 'w') as f:
             f.write(rtl_v)
-    print("Generated Config Header, Shim, and RTL Skeleton from DTS.")
+            
+    # 4. Generate Simulator Wrapper
+    sim_cpp = generate_sim_cpp(nodes)
+    with open("src/sim/sim_main.cpp", 'w') as f:
+        f.write(sim_cpp)
+        
+    print("Generated Config Header, Shim, RTL Skeleton, and Simulator from DTS.")
