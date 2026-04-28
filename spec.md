@@ -56,7 +56,7 @@ graph TD
 ### 4.1. Syscall Interceptor Layer (Shim)
 - **責務:** アプリケーションが発行するデバイスアクセス（`open`, `ioctl`, `mmap`）を [LD_PRELOAD](AddInfo_LD_PRELOAD.md) でインターセプトし、仮想デバイスへリダイレクトする。
 - **現状:** `/dev/fpga*`, `/dev/uio*`, `/dev/i2c-*`, `/dev/mem`, `/dev/ttyPS*` をトラップ。
-- **/dev/mem 対応:** 物理アドレスをキーとしたルーティングテーブルを持ち、`mmap` 時に適切な共有メモリへ自動でリダイレクトする。
+- **/dev/mem 対応:** 物理アドレスをキーとしたルーティングテーブルを持ち、`mmap` 時に適切な共有メモリへ自動でリダイレクトする。UIO等のデバイスファイル名（`label`）がDTSに明示的に定義されていないノードへの直接アクセスであっても、物理アドレスベースで透過的にルーティングを保証する。
 - **生成:** `tests/vfpga_config.dts` をソースとし、`scripts/gen_vfpga.py` により自動生成される。
 - **原則:** Device Tree Source (FPGAのレジスタアドレスや定義) を唯一の真実 (Source Truth) とし、Shim (Cコード) と RTL (Verilog) の一貫性を自動的に担保する。
 - **意義:** FWアプリケーションのソースコードを一切変更することなく作成したelfを実機(評価ボード)で実行できる。
@@ -73,6 +73,7 @@ graph TD
 ### 4.4. RTL-C++ Integrated Bridge (Verilator Interface)
 - **責務:** HDL論理を [Verilator](AddInfo_verilator.md) で高速な C++ モデルとして実行し、共有メモリの特定オフセットと信号を同期させる。
 - **生成:** DTS の `registers` 定義に基づき、バス・インターフェースを備えた Verilog スケルトン (`vfpga_top.v`) が自動生成される。
+- **生成制約 (ハードコードの禁止):** 自動生成されるC++ラッパー（`sim_main.cpp`）内で、特定の内部レジスタ（`top->RST` 等）を直接操作してはならない。共有メモリからの変更は、必ず汎用的なバスアクセス（`addr`, `w_data`, `w_en` 等）に変換してVerilogモジュールに伝達する。これにより、学習者が書いたVerilog側の「書き込み/読み込みロジック（`always`ブロック）」がバイパスされるのを防ぎ、シミュレーション上で確実に実行・評価される仕組みを維持する。
 
 ### 4.5. UART-to-TCP Bridge (Pseudo Terminal Interface)
 - **責務:** ターミナル操作が必要な UART 通信を TCP ポートへブリッジする。
