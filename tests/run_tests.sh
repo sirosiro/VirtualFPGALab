@@ -22,9 +22,9 @@ SCENARIOS_DIR="tests/scenarios"
 # --- Functions ---
 cleanup_processes() {
     echo -e "\n[Runner] Stopping background processes..."
-    pkill -f vlogic_controller || true
-    pkill -f Vvfpga_top || true
-    pkill -f dashboard_server || true
+    pkill -9 -f vlogic_controller || true
+    pkill -9 -f Vvfpga_top || true
+    pkill -9 -f dashboard_server || true
 }
 
 # --- Argument Parsing ---
@@ -110,6 +110,7 @@ for scenario in ${SCENARIOS_DIR}/*; do
     # Run the test
     echo "[Runner] Running test..."
     LD_PRELOAD=./${SHIM} ./${scenario}/test_bin
+
     
     if [ $? -eq 0 ]; then
         echo "[Runner] RESULT: $(basename ${scenario}) PASSED"

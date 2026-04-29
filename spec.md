@@ -35,7 +35,7 @@ graph TD
     end
 
     subgraph "The Bridge"
-        Shim -- "Redirect" --> SHM["Shared Memory (/dev/shm)"]
+        Shim -- "Redirect" --> SHM["Shared Memory File (/tmp)"]
     end
 
     subgraph "Backend (Logic Side)"
@@ -63,7 +63,8 @@ graph TD
 
 
 ### 4.2. Shared Memory Register Emulator (Virtual Logic Space)
-- **責務:** `/dev/shm` を用いて FPGA 上のレジスタ空間を再現する。プロセッサと回路ロジック間の「通信路」となる。
+- **責務:** 共有メモリ・ファイル（標準：`/tmp`）を用いて FPGA 上のレジスタ空間を再現する。プロセッサと回路ロジック間の「通信路」となる。
+- **安定性:** コンテナ環境等の隔離された名前空間でも確実に動作するよう、OS標準のテンポラリ・ディレクトリを通信路に採用。
 
 ### 4.3. Logic Visualization & Diagnostic Tool (The Dashboard)
 - **責務:** 共有メモリ内のレジスタ状態をリアルタイムで監視・可視化する。
@@ -113,6 +114,10 @@ graph TD
 - **Phase 4 (Hardware Transparency) 完了**:
     - [x] **Universal Intercept**: `/dev/mem` および物理アドレスベースのルーティング。
     - [x] **UART Bridge**: PTY リダイレクトによる TCP コンソール接続。
+- **Phase 5 (Robustness & Refactoring) 完了**:
+    - [x] **エンジンのモジュール化**: `gen_vfpga.py` のクラスベース刷新による拡張性確保。
+    - [x] **通信パスの堅牢化**: `/tmp` への移行による隔離環境での安定動作。
+    - [x] **双方向ステートフル同期**: ソフトウェアと RTL 間のレースコンディションの解消。
 
 ---
 
