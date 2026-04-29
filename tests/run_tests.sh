@@ -42,6 +42,11 @@ if [ "$CLEAN" = true ]; then
     echo "[Runner] Cleaning project artifacts and logs..."
     make clean
     rm -f tests/scenarios/*/test_bin tests/scenarios/*/*.bin
+    for scenario in tests/scenarios/*; do
+        if [ -f "${scenario}/Makefile" ]; then
+            make -C "${scenario}" clean > /dev/null 2>&1 || true
+        fi
+    done
     rm -f tests/scenarios/*/*.log
     rm -f *.log
     echo "[Runner] Clean finished."
@@ -87,9 +92,9 @@ for scenario in ${SCENARIOS_DIR}/*; do
     
     start_environment "${scenario}"
     
-    # Build the scenario's main.c
-    echo "[Runner] Compiling ${scenario}/main.c..."
-    gcc "${scenario}/main.c" -o "${scenario}/test_bin" -Isrc/include || exit 1
+    # Build the scenario via Makefile
+    echo "[Runner] Building ${scenario} via Makefile..."
+    make -C "${scenario}" || exit 1
     
     # Run the test
     echo "[Runner] Running test..."

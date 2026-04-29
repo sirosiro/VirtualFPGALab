@@ -35,7 +35,9 @@ if [ "$CLEAN" = true ]; then
     echo "[Runner] Cleaning artifacts for scenario: ${SCENARIO_NAME}..."
     cd "${PROJECT_ROOT}"
     make clean > /dev/null 2>&1 || true
-    rm -f "${SCENARIO_DIR}/test_bin" "${SCENARIO_DIR}/"*.bin
+    if [ -f "${SCENARIO_DIR}/Makefile" ]; then
+        make -C "${SCENARIO_DIR}" clean > /dev/null 2>&1 || true
+    fi
     rm -f "${SCENARIO_DIR}/"*.log
     rm -f "${PROJECT_ROOT}/controller.log" "${PROJECT_ROOT}/simulator.log"
     echo "[Runner] Clean finished."
@@ -60,6 +62,9 @@ cleanup() {
 trap cleanup EXIT
 
 # --- 実行フェーズ ---
+
+# 確実にプロジェクトルートから実行を開始する
+cd "${PROJECT_ROOT}"
 
 echo -e "\n[Runner] >>> Starting Scenario: ${SCENARIO_NAME} <<<"
 
@@ -89,9 +94,9 @@ python3 -u "${CONTROLLER}" "${DTS}" > "${SCENARIO_DIR}/controller.log" 2>&1 &
 # 通信の準備が整うまで少し待機
 sleep 2
 
-# 5. アプリケーションのコンパイル
-echo "[Runner] Compiling ${SCENARIO_DIR}/main.c..."
-gcc "${SCENARIO_DIR}/main.c" -o "${SCENARIO_DIR}/test_bin" -I"${PROJECT_ROOT}/src/include" || exit 1
+# 5. アプリケーションのビルド
+echo "[Runner] Building application via Makefile in ${SCENARIO_DIR}..."
+make -C "${SCENARIO_DIR}" || exit 1
 
 # 6. アプリケーションの実行 (LD_PRELOADを使用)
 echo "[Runner] Executing application with LD_PRELOAD..."
