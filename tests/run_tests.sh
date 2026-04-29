@@ -41,7 +41,8 @@ done
 if [ "$CLEAN" = true ]; then
     echo "[Runner] Cleaning project artifacts and logs..."
     make clean
-    rm -rf tests/scenarios/*/test_bin
+    rm -f tests/scenarios/*/test_bin tests/scenarios/*/*.bin
+    rm -f tests/scenarios/*/*.log
     rm -f *.log
     echo "[Runner] Clean finished."
     exit 0
@@ -71,10 +72,10 @@ start_environment() {
     make engine -j$(nproc) || exit 1
     
     # 3. Start Controller
-    python3 -u ${CONTROLLER} ${dts} > controller.log 2>&1 &
+    python3 -u ${CONTROLLER} ${dts} > "${scenario_dir}/controller.log" 2>&1 &
     
     # 4. Start Simulator
-    ./${SIMULATOR} > simulator.log 2>&1 &
+    ./${SIMULATOR} > "${scenario_dir}/simulator.log" 2>&1 &
     
     sleep 3
 }

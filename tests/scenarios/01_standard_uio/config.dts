@@ -1,12 +1,26 @@
 /dts-v1/;
 
 / {
-    /* Standard node using /dev/fpga0 */
+    /*
+     * 【解説: UIOデバイスの定義】
+     * VirtualFPGALabのエミュレータは、この定義を見て「どの物理アドレス」を
+     * 「どのデバイスファイル (/dev/uioX)」として見せるかを決定します。
+     */
     vfpga_reg@40000000 {
+        /* 【解説】 standard UIOドライバを使用することを示します */
         compatible = "generic-uio";
-        reg = <0x40000000 0x1000>;
-        label = "/dev/fpga0";
         
+        /* 【解説】 FPGAに割り当てられた物理ベースアドレス(0x40000000)とサイズ(4KB) */
+        reg = <0x40000000 0x1000>;
+        
+        /* 【解説】 UIOデバイスノードの名前を固定します。C言語側からはこれを開きます */
+        label = "/dev/uio0";
+        
+        /* 
+         * 【解説: レジスタマップ定義】
+         * ここに記載した名前とオフセットが、自動生成される Verilog (vfpga_top.v) の
+         * ポート定義およびアドレスデコードロジックに反映されます。
+         */
         registers = 
             "RST @ 0x10",
             "EN  @ 0x14",

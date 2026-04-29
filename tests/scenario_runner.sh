@@ -1,0 +1,111 @@
+#!/bin/bash
+
+# ==============================================================================
+# VirtualFPGALab Scenario Runner (Shared Infrastructure)
+# ==============================================================================
+# このスクリプトは、個別のテストシナリオを実行するための共通ロジックです。
+# 1. DTSからのコード生成 2. シミュレーションエンジンのビルド 3. バックグラウンド起動
+# 4. アプリケーションのコンパイルと実行 5. プロセスの自動クリーンアップ
+# を行います。
+# ==============================================================================
+
+PROJECT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+SCENARIO_PATH=""
+CLEAN=false
+
+# --- 引数解析 ---
+for arg in "$@"; do
+    case $arg in
+        --clean|-c) CLEAN=true ;;
+        *) if [ -d "$arg" ]; then SCENARIO_PATH="$arg"; fi ;;
+    esac
+done
+
+if [ -z "$SCENARIO_PATH" ]; then
+    echo "Usage: $0 <scenario_directory_path> [--clean|-c]"
+    exit 1
+fi
+
+# シナリオの絶対パスを取得
+SCENARIO_DIR=$(cd "$SCENARIO_PATH" && pwd)
+SCENARIO_NAME=$(basename "$SCENARIO_DIR")
+
+# --- クリーンアップモード ---
+if [ "$CLEAN" = true ]; then
+    echo "[Runner] Cleaning artifacts for scenario: ${SCENARIO_NAME}..."
+    cd "${PROJECT_ROOT}"
+    make clean > /dev/null 2>&1 || true
+    rm -f "${SCENARIO_DIR}/test_bin" "${SCENARIO_DIR}/"*.bin
+    rm -f "${SCENARIO_DIR}/"*.log
+    rm -f "${PROJECT_ROOT}/controller.log" "${PROJECT_ROOT}/simulator.log"
+    echo "[Runner] Clean finished."
+    exit 0
+fi
+
+# --- 設定 ---
+CONTROLLER="${PROJECT_ROOT}/src/controller/vlogic_controller.py"
+SIMULATOR="${PROJECT_ROOT}/obj_dir/Vvfpga_top"
+SHIM="${PROJECT_ROOT}/libfpgashim.so"
+DTS="${SCENARIO_DIR}/config.dts"
+
+# --- プロセス掃除関数 ---
+cleanup() {
+    echo -e "\n[Runner] Stopping background processes..."
+    pkill -f vlogic_controller || true
+    pkill -f Vvfpga_top || true
+    pkill -f dashboard_server || true
+}
+
+# 異常終了時や中断時（Ctrl+C）にプロセスを掃除するように設定
+trap cleanup EXIT
+
+# --- 実行フェーズ ---
+
+echo -e "\n[Runner] >>> Starting Scenario: ${SCENARIO_NAME} <<<"
+
+# 1. DTSからコード生成
+echo "[Runner] Generating code from ${DTS}..."
+python3 "${PROJECT_ROOT}/scripts/gen_vfpga.py" "${DTS}"
+
+# 2. Verilogの配置
+if [ -f "${SCENARIO_DIR}/vfpga_top.v" ]; then
+    echo "[Runner] Using custom Verilog from scenario."
+    cp "${SCENARIO_DIR}/vfpga_top.v" "${PROJECT_ROOT}/src/rtl/vfpga_top.v"
+else
+    echo "[Runner] Using default RTL skeleton."
+    cp "${PROJECT_ROOT}/src/rtl/vfpga_top_skeleton.v" "${PROJECT_ROOT}/src/rtl/vfpga_top.v"
+fi
+
+# 3. エンジンのビルド
+echo "[Runner] Building simulation engine (this may take a few seconds)..."
+cd "${PROJECT_ROOT}"
+make engine -j$(nproc) || exit 1
+
+# 4. バックグラウンドプロセスの起動
+echo "[Runner] Starting Backend Controller & RTL Simulator..."
+python3 -u "${CONTROLLER}" "${DTS}" > "${SCENARIO_DIR}/controller.log" 2>&1 &
+"${SIMULATOR}" > "${SCENARIO_DIR}/simulator.log" 2>&1 &
+
+# 通信の準備が整うまで少し待機
+sleep 2
+
+# 5. アプリケーションのコンパイル
+echo "[Runner] Compiling ${SCENARIO_DIR}/main.c..."
+gcc "${SCENARIO_DIR}/main.c" -o "${SCENARIO_DIR}/test_bin" -I"${PROJECT_ROOT}/src/include" || exit 1
+
+# 6. アプリケーションの実行 (LD_PRELOADを使用)
+echo "[Runner] Executing application with LD_PRELOAD..."
+cd "${SCENARIO_DIR}"
+LD_PRELOAD="${SHIM}" ./test_bin
+
+# 結果を保持
+RESULT=$?
+
+if [ $RESULT -eq 0 ]; then
+    echo -e "\n[Runner] RESULT: SUCCESS"
+else
+    echo -e "\n[Runner] RESULT: FAILURE (Exit Code: $RESULT)"
+    echo "[Runner] Check controller.log and simulator.log in the scenario directory for details."
+fi
+
+exit $RESULT
