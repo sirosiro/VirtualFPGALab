@@ -29,6 +29,7 @@ engine: $(SHIM_OUT) $(SIM_OUT)
 clean:
 	rm -f $(SHIM_OUT)
 	rm -f $(SHIM_SRC) $(RTL_TOP) src/include/vfpga_config.h
+	rm -f src/sim/sim_main.cpp src/rtl/vfpga_top_skeleton.v
 	rm -rf obj_dir
 	$(MAKE) -C tests clean || true
 	$(MAKE) -C sandbox clean || true
