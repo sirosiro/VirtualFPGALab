@@ -59,19 +59,30 @@ start_environment() {
     local scenario_dir=$1
     local dts="${scenario_dir}/config.dts"
     echo -e "\n[Runner] >>> SCENARIO: $(basename ${scenario_dir}) <<<"
+
+    # 前のシナリオの残骸を削除し、クリーンな状態にする
+    make clean > /dev/null 2>&1
+
     echo "[Runner] Setting up environment with ${dts}..."
     
     # 1. Generate code from DTS
     python3 scripts/gen_vfpga.py ${dts}
     
     # 2. Handle Verilog
-    if [ -f "${scenario_dir}/vfpga_top.v" ]; then
-        echo "[Runner] Using custom Verilog from scenario."
-        cp "${scenario_dir}/vfpga_top.v" src/rtl/vfpga_top.v
-    else
-        echo "[Runner] Using default RTL skeleton."
+    # シナリオディレクトリにある全ての .v ファイルを src/rtl/ にコピーする
+    if ls "${scenario_dir}/"*.v >/dev/null 2>&1; then
+        echo "[Runner] Copying Verilog files from scenario..."
+        cp "${scenario_dir}/"*.v src/rtl/
+    fi
+
+    # vfpga_top.v が存在しない場合はスケルトンを使用する
+    if [ ! -f "src/rtl/vfpga_top.v" ]; then
+        echo "[Runner] vfpga_top.v not found. Using default RTL skeleton."
         cp src/rtl/vfpga_top_skeleton.v src/rtl/vfpga_top.v
     fi
+
+    # 重複を避けるため、スケルトンファイルは削除しておく
+    rm -f src/rtl/vfpga_top_skeleton.v
     
     make libfpgashim.so -j$(nproc) || exit 1
     make engine -j$(nproc) || exit 1

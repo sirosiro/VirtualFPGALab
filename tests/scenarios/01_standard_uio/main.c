@@ -70,7 +70,7 @@ int main() {
         return 1;
     }
 
-    munmap(regs, REG_SIZE);
+    munmap((void *)regs, REG_SIZE);
     close(fd);
     return 0;
 }

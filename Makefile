@@ -6,6 +6,7 @@ SHIM_SRC = src/shim/libfpgashim.c
 SHIM_OUT = libfpgashim.so
 GEN_SCRIPT = scripts/gen_vfpga.py
 RTL_TOP = src/rtl/vfpga_top.v
+RTL_SRCS = $(RTL_TOP) $(filter-out $(RTL_TOP), $(wildcard src/rtl/*.v))
 
 # Verilator
 VERILATOR = verilator
@@ -20,16 +21,16 @@ $(SHIM_OUT): $(SHIM_SRC)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
 # Build the Verilator Simulator
-$(SIM_OUT): $(RTL_TOP) $(SIM_SRC)
-	$(VERILATOR) $(VERILATOR_FLAGS) $(RTL_TOP) $(SIM_SRC)
+$(SIM_OUT): $(RTL_SRCS) $(SIM_SRC)
+	$(VERILATOR) $(VERILATOR_FLAGS) $(RTL_SRCS) $(SIM_SRC)
 	$(MAKE) -C obj_dir -f Vvfpga_top.mk
 
 engine: $(SHIM_OUT) $(SIM_OUT)
 
 clean:
 	rm -f $(SHIM_OUT)
-	rm -f $(SHIM_SRC) $(RTL_TOP) src/include/vfpga_config.h
-	rm -f src/sim/sim_main.cpp src/rtl/vfpga_top_skeleton.v
+	rm -f $(SHIM_SRC) src/include/vfpga_config.h
+	rm -f src/sim/sim_main.cpp src/rtl/*.v
 	rm -rf obj_dir
 	$(MAKE) -C tests clean || true
 	$(MAKE) -C sandbox clean || true

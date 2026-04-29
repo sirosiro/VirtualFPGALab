@@ -18,9 +18,11 @@ module vfpga_top (
     output reg [31:0] r_data,
     
     // レジスタ用ポート (config.dts の定義と完全に一致させる必要があります)
+    /* verilator lint_off UNUSED */
     output reg [31:0] RST,
     output reg [31:0] EN,
     output reg [31:0] CNT
+    /* verilator lint_on UNUSED */
 );
 
     // 【解説: レジスタへの書き込み処理】
