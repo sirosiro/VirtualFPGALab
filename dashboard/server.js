@@ -80,12 +80,94 @@ setInterval(() => {
     updateShm();
 }, 200); // 200ms間隔で更新
 
-// APIエンドポイント
-app.get('/api/manifest', (req, res) => {
-    res.json(manifest);
+const net = require('net');
+
+const UART_MAP_PATH = path.join(__dirname, 'data/uart_map.json');
+let uartConnections = {}; // name -> net.Socket
+let uartLogs = {}; // name -> string (last 1000 chars)
+
+// UARTマクロの定義（拡張可能）
+const UART_MACROS = [
+    { pattern: /login:/i, response: 'root\n', delay: 500 },
+    { pattern: /password:/i, response: 'vfpga\n', delay: 500 }
+];
+
+// UART接続の同期
+function syncUartConnections() {
+    try {
+        if (fs.existsSync(UART_MAP_PATH)) {
+            const mapping = JSON.parse(fs.readFileSync(UART_MAP_PATH, 'utf8'));
+            for (const [name, port] of Object.entries(mapping)) {
+                if (!uartConnections[name]) {
+                    uartConnections[name] = 'connecting'; // 予約
+                    connectToUart(name, port);
+                }
+            }
+        }
+    } catch (e) {}
+}
+
+function connectToUart(name, port) {
+    console.log(`[Backend] Connecting to UART bridge: ${name} on port ${port}`);
+    const client = new net.Socket();
+    
+    client.connect(port, '127.0.0.1', () => {
+        console.log(`[Backend] UART ${name} connected`);
+        uartConnections[name] = client;
+        uartLogs[name] = "";
+    });
+
+    client.on('data', (data) => {
+        const text = data.toString('utf8');
+        uartLogs[name] = (uartLogs[name] + text).slice(-5000);
+        io.emit('uart-data', { name, text });
+        
+        // マクロチェック
+        UART_MACROS.forEach(macro => {
+            if (macro.pattern.test(text)) {
+                console.log(`[Macro] Pattern detected in ${name}: ${macro.pattern}. Responding in ${macro.delay}ms`);
+                setTimeout(() => {
+                    if (uartConnections[name]) uartConnections[name].write(macro.response);
+                }, macro.delay);
+            }
+        });
+    });
+
+    client.on('close', () => {
+        console.log(`[Backend] UART ${name} disconnected`);
+        delete uartConnections[name];
+    });
+
+    client.on('error', (err) => {
+        console.error(`[Backend] UART ${name} error: ${err.message}`);
+    });
+}
+
+// Socket.io通信の設定
+io.on('connection', (socket) => {
+    console.log('[Backend] Frontend client connected');
+    
+    // 接続時に既存のログを送信
+    socket.emit('uart-init', uartLogs);
+
+    socket.on('uart-send', ({ name, text }) => {
+        if (uartConnections[name]) {
+            uartConnections[name].write(text);
+        }
+    });
 });
 
-// フロントエンドの静的ファイル（ビルド後用）
+// 定期実行の更新
+setInterval(() => {
+    if (Object.keys(manifest).length === 0) loadManifest();
+    updateShm();
+    syncUartConnections();
+}, 200);
+
+// API
+app.get('/api/manifest', (req, res) => res.json(manifest));
+app.get('/api/uart/logs', (req, res) => res.json(uartLogs));
+
 app.use(express.static(path.join(__dirname, 'client/dist')));
 
 const PORT = process.env.PORT || 8080;

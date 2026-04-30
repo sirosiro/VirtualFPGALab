@@ -1,45 +1,62 @@
 import time
-import struct
 import sys
 import re
 import os
-from multiprocessing import shared_memory
-
-SHM_NAME = "vfpga_reg"
-
-def get_shm_info_from_dts(dts_path):
-    regions = []
-    try:
-        with open(dts_path, 'r') as f:
-            content = f.read()
-        
-        # Find all patterns like node@addr { ... reg = <... size> ... }
-        matches = re.finditer(r'([a-zA-Z0-9_]+)@[0-9a-f]+\s*\{([^}]+)\}', content)
-        for match in matches:
-            name = match.group(1).strip()
-            body = match.group(2)
-            
-            # Extract size from reg = <addr size>
-            reg_match = re.search(r'reg\s*=\s*<[^ ]+\s+([^>]+)>', body)
-            if reg_match:
-                size = int(reg_match.group(1).strip(), 0)
-                regions.append({'name': name, 'size': size})
-    except Exception as e:
-        print(f"[Python] Error parsing DTS: {e}")
-    return regions
-
+import mmap
 import glob
 import socket
 import threading
 import select
 
+# プロジェクトルートの動的取得 (src/controller/vlogic_controller.py から見て 2つ上の階層)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+SHM_NAME = "vfpga_reg"
+
+def get_shm_info_from_dts(dts_path):
+    regions = []
+    try:
+        if not os.path.exists(dts_path):
+            return regions
+        with open(dts_path, 'r') as f:
+            content = f.read()
+        
+        matches = re.finditer(r'([a-zA-Z0-9_@]+)\s*\{([^}]+)\}', content)
+        for match in matches:
+            raw_name = match.group(1).strip()
+            name = raw_name.split('@')[0]
+            body = match.group(2)
+            
+            comp_match = re.search(r'compatible\s*=\s*"([^"]+)"', body)
+            is_uio = False
+            if comp_match and 'generic-uio' in comp_match.group(1):
+                is_uio = True
+            
+            reg_match = re.search(r'reg\s*=\s*<[^ ]+\s+([^>]+)>', body)
+            if reg_match:
+                try:
+                    size = int(reg_match.group(1).strip(), 0)
+                    regions.append({'name': name, 'size': size, 'is_uio': is_uio})
+                except:
+                    continue
+    except Exception as e:
+        print(f"[Python] Error parsing DTS: {e}")
+    return regions
+
+
 def uart_bridge_thread(pts_path, port):
     print(f"[Python] Starting UART bridge for {pts_path} on port {port}...")
-    try:
-        pts_fd = os.open(pts_path, os.O_RDWR | os.O_NOCTTY)
-    except Exception as e:
-        print(f"[Python] UART Bridge Error: {e}")
-        return
+    
+    pts_fd = -1
+    # 起動直後の極小のレースコンディションを回避するため、数回リトライする
+    for i in range(10):
+        try:
+            pts_fd = os.open(pts_path, os.O_RDWR | os.O_NOCTTY)
+            break
+        except Exception as e:
+            if i == 9:
+                print(f"[Python] UART Bridge Final Error: {e}")
+                return
+            time.sleep(0.2)
 
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -64,12 +81,24 @@ def uart_bridge_thread(pts_path, port):
         except Exception:
             break
 
+def update_uart_map(active_bridges):
+    import json
+    try:
+        mapping = {os.path.basename(f): port for f, port in active_bridges.items()}
+        map_path = os.path.join(PROJECT_ROOT, "dashboard/data/uart_map.json")
+        with open(map_path, "w") as f:
+            json.dump(mapping, f)
+    except Exception as e:
+        print(f"[Python] Error updating UART map: {e}")
+
 def uart_discovery_thread():
     active_bridges = {}
     base_port = 2000
     print("[Python] UART Discovery thread started.")
     while True:
-        files = glob.glob("/tmp/vfpga_uart_*")
+        glob_pattern = os.path.join(PROJECT_ROOT, "dashboard/data/vfpga_uart_*")
+        files = glob.glob(glob_pattern)
+        changed = False
         for f in files:
             if f not in active_bridges:
                 try:
@@ -80,8 +109,12 @@ def uart_discovery_thread():
                     t.start()
                     active_bridges[f] = port
                     print(f"[Python] UART Found: {f} -> {pts_path} (TCP Port {port})")
+                    changed = True
                 except Exception as e:
                     print(f"[Python] Error starting bridge for {f}: {e}")
+        
+        if changed:
+            update_uart_map(active_bridges)
         time.sleep(1)
 
 def main():
@@ -89,10 +122,6 @@ def main():
         print("Usage: vlogic_controller.py <dts_path>")
         sys.exit(1)
         
-    # Clean up old mapping files
-    for f in glob.glob("/tmp/vfpga_uart_*"):
-        os.remove(f)
-
     # Start discovery
     t = threading.Thread(target=uart_discovery_thread, daemon=True)
     t.start()
@@ -100,25 +129,26 @@ def main():
     dts_path = sys.argv[1]
     regions = get_shm_info_from_dts(dts_path)
     
+    # ジェネレータ側のロジックと合わせる
+    uio = next((r for r in regions if r.get('is_uio')), None)
+    board_name = uio['name'] if uio else "vfpga_reg"
+    board_size = uio['size'] if uio else (regions[0]['size'] if regions else 1024)
+
     print(f"[Python] Starting Generic Virtual Logic Controller...")
     print(f"[Python] Using DTS: {dts_path}")
     
-    shm_objects = []
+    path = f"/tmp/{board_name}"
+    print(f"[Python] Creating SHM file: {path}, Size: {board_size}")
+    
+    shm = None
     try:
-        for reg in regions:
-            name = reg['name']
-            size = reg['size']
-            print(f"[Python] Creating SHM: {name}, Size: {size}")
-            
-            # Clean up existing
-            try:
-                temp_shm = shared_memory.SharedMemory(name=name)
-                temp_shm.unlink()
-            except FileNotFoundError:
-                pass
-
-            shm = shared_memory.SharedMemory(name=name, create=True, size=size)
-            shm_objects.append(shm)
+        # Create or open the file
+        fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o666)
+        os.ftruncate(fd, board_size)
+        
+        # Mmap it
+        shm = mmap.mmap(fd, board_size)
+        os.close(fd) # The mapping survives the close of the FD
 
         print("[Python] Backend is ready. Logic is handled by Verilator/RTL.")
         print("[Python] Press Ctrl+C to stop.")
@@ -131,7 +161,7 @@ def main():
     finally:
         for shm in shm_objects:
             shm.close()
-            shm.unlink()
+        # The files in /tmp can stay or be cleaned up by start_lab.sh
 
 if __name__ == "__main__":
     main()

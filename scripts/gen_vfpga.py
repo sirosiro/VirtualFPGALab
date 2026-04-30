@@ -99,27 +99,33 @@ class ConfigGenerator(BaseGenerator):
     def generate(self, model: BoardModel):
         uio_node = model.get_uio_device()
         shm_name = uio_node.name if uio_node else "vfpga_reg"
+        shm_size = uio_node.size if uio_node else 1024
+        # プロジェクトルートを動的に取得
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
+        
         return """/* Auto-generated Config from DTS */
 #ifndef VFPGA_CONFIG_H
 #define VFPGA_CONFIG_H
-#define SHM_PATH "/tmp/%s"
-#define SHM_SIZE 1024
+#define PROJECT_ROOT "%s"
+#define SHM_NAME "%s"
+#define SHM_FILE "/tmp/%s"
+#define SHM_SIZE %d
 #endif
-""" % shm_name
+""" % (project_root, shm_name, shm_name, shm_size)
 
 class ShimGenerator(BaseGenerator):
     def generate(self, model: BoardModel):
         mmap_routes, i2c_matches, uart_matches = [], [], []
-        for dev in model.devices:
+        for i, dev in enumerate(model.devices):
             if dev.type == 'uio':
                 reg_parts = dev.base_reg.split()
                 if len(reg_parts) >= 2:
-                    mmap_routes.append('    { %s, %s, SHM_PATH, "%s" }' % (reg_parts[0], reg_parts[1], dev.path))
+                    mmap_routes.append('    { %s, %s, SHM_FILE, "%s" }' % (reg_parts[0], reg_parts[1], dev.path))
             elif dev.type == 'i2c':
                 bus_id = dev.extra_props.get('bus_id', '1')
                 i2c_matches.append('    if (pathname != NULL && strcmp(pathname, "%s") == 0) return %s;' % (dev.path, bus_id))
             elif dev.type == 'uart':
-                uart_matches.append('    if (pathname != NULL && strcmp(pathname, "%s") == 0) return 1;' % dev.path)
+                uart_matches.append('    if (pathname != NULL && strcmp(pathname, "%s") == 0) return %d;' % (dev.path, i + 1))
         
         return """
 #define _GNU_SOURCE
@@ -136,6 +142,7 @@ class ShimGenerator(BaseGenerator):
 #include <linux/i2c-dev.h>
 #include <linux/i2c.h>
 #include <sys/ioctl.h>
+#include <errno.h>
 #include "vfpga_config.h"
 
 #define MAX_FDS 1024
@@ -174,10 +181,21 @@ int open(const char *pathname, int flags, ...) {
         if (fd != -1 && fd < MAX_FDS) virtual_fd_route_idx[fd] = -100 - i2c_bus_id;
         return fd;
     }
-    if (is_uart_device(pathname)) {
+    int uart_id = is_uart_device(pathname);
+    if (uart_id != 0) {
         int master_fd = posix_openpt(O_RDWR | O_NOCTTY);
         if (master_fd != -1) {
             grantpt(master_fd); unlockpt(master_fd);
+            char *slave_name = ptsname(master_fd);
+            if (slave_name) {
+                char map_path[512];
+                snprintf(map_path, sizeof(map_path), "%%s/dashboard/data/vfpga_uart_%%d", PROJECT_ROOT, uart_id);
+                int map_fd = original_open(map_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+                if (map_fd != -1) {
+                    write(map_fd, slave_name, strlen(slave_name));
+                    close(map_fd);
+                }
+            }
             if (master_fd < MAX_FDS) virtual_fd_route_idx[master_fd] = -200;
         }
         return master_fd;
@@ -200,8 +218,16 @@ void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
         
         if (target_idx != -1) {
             int shm_fd = original_open(routes[target_idx].shm_path, O_RDWR, 0666);
-            void *res = original_mmap(addr, length, prot, flags, shm_fd, offset);
-            close(shm_fd); return res;
+            if (shm_fd < 0) {
+                fprintf(stderr, "[Shim] ERROR: Failed to open %%s! (errno: %%d)\\n", routes[target_idx].shm_path, errno);
+            } else {
+                void *res = original_mmap(addr, length, prot, flags, shm_fd, offset);
+                if (res == MAP_FAILED) {
+                    fprintf(stderr, "[Shim] ERROR: original_mmap failed! (shm_fd: %%d, length: %%zu, errno: %%d)\\n", shm_fd, length, errno);
+                }
+                close(shm_fd); 
+                return res;
+            }
         }
     }
     return original_mmap(addr, length, prot, flags, fd, offset);
@@ -283,7 +309,7 @@ static RegMeta registers[] = { %s };
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     Vvfpga_top* top = new Vvfpga_top;
-    int fd = open(SHM_PATH, O_CREAT | O_RDWR, 0666);
+    int fd = open(SHM_FILE, O_CREAT | O_RDWR, 0666);
     if (ftruncate(fd, SHM_SIZE) == -1) {
         perror("ftruncate");
         return 1;
@@ -295,7 +321,7 @@ int main(int argc, char** argv) {
     top->rst_n = 0; top->eval(); top->clk = 1; top->eval(); top->clk = 0; top->eval();
     top->rst_n = 1; top->eval();
 
-    printf("[Sim] Simulator Started (SHM: %%s)\\n", SHM_PATH); fflush(stdout);
+    printf("[Sim] Simulator Started (SHM: %%s)\\n", SHM_FILE); fflush(stdout);
     while (!Verilated::gotFinish()) {
         for (int i = 0; i < %d; i++) {
             uint32_t off = registers[i].offset / 4;
@@ -322,10 +348,15 @@ int main(int argc, char** argv) {
 class ManifestGenerator(BaseGenerator):
     def generate(self, model: BoardModel):
         import json
+        uio = model.get_uio_device()
+        shm_name = uio.name if uio else "vfpga_reg"
+        shm_size = uio.size if uio else 1024
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
         manifest = {
-            "board": model.name,
-            "shm_path": f"/tmp/{model.name}",
-            "shm_size": model.get_uio_device().size if model.get_uio_device() else 1024,
+            "board": shm_name,
+            "shm_path": f"/tmp/{shm_name}",
+            "shm_size": shm_size,
+            "project_root": project_root,
             "devices": []
         }
         for dev in model.devices:
@@ -343,6 +374,8 @@ class ManifestGenerator(BaseGenerator):
 class GeneratorOrchestrator:
     def __init__(self, model: BoardModel):
         self.model = model
+        # プロジェクトルートを取得
+        self.project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
         self.generators = {
             "src/include/vfpga_config.h": ConfigGenerator(),
             "src/shim/libfpgashim.c": ShimGenerator(),
@@ -351,12 +384,14 @@ class GeneratorOrchestrator:
             "dashboard/data/board_manifest.json": ManifestGenerator()
         }
     def generate_all(self):
-        for path, gen in self.generators.items():
+        for rel_path, gen in self.generators.items():
             content = gen.generate(self.model)
-            dir_name = os.path.dirname(path)
+            # 絶対パスを構築
+            abs_path = os.path.join(self.project_root, rel_path)
+            dir_name = os.path.dirname(abs_path)
             if dir_name:
                 os.makedirs(dir_name, exist_ok=True)
-            with open(path, "w") as f:
+            with open(abs_path, "w") as f:
                 f.write(content)
 
 if __name__ == "__main__":

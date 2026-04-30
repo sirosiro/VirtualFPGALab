@@ -1,7 +1,9 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+#include <termios.h>
 
 /**
  * 【解説: UART(シリアルポート)の制御】
@@ -25,22 +27,53 @@ int main() {
 
     printf("[App] Successfully opened /dev/ttyPS2\n");
 
+    // 【解説: Rawモードの設定】
+    // シリアルポートのエコーバックや特殊文字処理を無効化し、
+    // 生のデータをそのままやり取りできるように設定します。
+    struct termios options;
+    tcgetattr(fd, &options);
+    cfmakeraw(&options);
+    tcsetattr(fd, TCSANOW, &options);
+
     // 【解説: データの送信】
-    // write システムコールを呼ぶだけで、UARTの送信レジスタ（TX）にデータが送られます。
-    const char *msg = "Hello from Virtual FPGA UART!\r\n";
-    printf("[App] Sending: %s", msg);
-    
-    ssize_t written = write(fd, msg, strlen(msg));
-    if (written < 0) {
-        perror("write");
-        close(fd);
-        return 1;
+    const char *msg = "\r\n"
+                      "========================================\r\n"
+                      "   VirtualFPGALab UART Console Shell\r\n"
+                      "========================================\r\n"
+                      "Type 'hello' or 'exit'.\r\n"
+                      "\r\n"
+                      "Login: ";
+    write(fd, msg, strlen(msg));
+
+    // 【解説: 実行モードの切り替え】
+    // 環境変数 VFPGA_INTERACTIVE が設定されている場合のみ、対話ループに入ります。
+    // これにより、自動テスト（run_tests.sh）を妨げずにダッシュボードでのデモを両立させます。
+    if (getenv("VFPGA_INTERACTIVE")) {
+        printf("[App] Entering Interactive Mode (VFPGA_INTERACTIVE is set)\n");
+        char buf[128];
+        while (1) {
+            ssize_t n = read(fd, buf, sizeof(buf) - 1);
+            if (n > 0) {
+                buf[n] = '\0';
+                if (strstr(buf, "hello")) {
+                    const char *reply = "Hi there! This is FPGA hardware IP speaking.\r\n> ";
+                    write(fd, reply, strlen(reply));
+                } else if (strstr(buf, "exit")) {
+                    const char *reply = "Goodbye!\r\n";
+                    write(fd, reply, strlen(reply));
+                    break;
+                } else {
+                    write(fd, "> ", 2);
+                    write(fd, buf, n);
+                    write(fd, "\r\n> ", 4);
+                }
+            }
+            usleep(100000); // 100ms
+        }
+    } else {
+        printf("[App] Running in Automated Mode. Greeting sent.\n");
     }
 
-    printf("[App] Successfully wrote %zd bytes to UART\n", written);
-
-    // 【解説: 後始末】
-    // 通信が終わったら close を呼びます。
     close(fd);
     printf("--- UART Access Test End ---\n");
     return 0;

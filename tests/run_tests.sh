@@ -49,6 +49,8 @@ if [ "$CLEAN" = true ]; then
     done
     rm -f tests/scenarios/*/*.log
     rm -f *.log
+    rm -f board_manifest.json
+    rm -f dashboard/data/*.json
     echo "[Runner] Clean finished."
     exit 0
 fi
@@ -59,6 +61,10 @@ start_environment() {
     local scenario_dir=$1
     local dts="${scenario_dir}/config.dts"
     echo -e "\n[Runner] >>> SCENARIO: $(basename ${scenario_dir}) <<<"
+
+    # 中間ファイルの削除
+    rm -f board_manifest.json
+    rm -f dashboard/data/*.json
 
     # 前のシナリオの残骸を削除し、クリーンな状態にする
     make clean > /dev/null 2>&1
@@ -81,8 +87,8 @@ start_environment() {
         exit 1
     fi
     
-    make libfpgashim.so -j$(nproc) || exit 1
-    make engine -j$(nproc) || exit 1
+    make libfpgashim.so || exit 1
+    make engine || exit 1
     
     # 3. Start Controller
     python3 -u ${CONTROLLER} ${dts} > "${scenario_dir}/controller.log" 2>&1 &
