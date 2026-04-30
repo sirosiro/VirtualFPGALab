@@ -55,7 +55,7 @@ cleanup() {
     echo -e "\n[Runner] Stopping background processes..."
     pkill -f vlogic_controller || true
     pkill -f Vvfpga_top || true
-    pkill -f dashboard_server || true
+    pkill -f "node dashboard/server.js" || true
 }
 
 # 異常終了時や中断時（Ctrl+C）にプロセスを掃除するように設定

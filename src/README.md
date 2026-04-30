@@ -8,7 +8,7 @@
 
 | ディレクトリ | 役割 | 主なファイル | 生成種別 |
 | :--- | :--- | :--- | :---: |
-| **controller** | バックエンド管理 | `vlogic_controller.py`, `dashboard_server.py` | 手書き |
+| **controller** | バックエンド管理 | `vlogic_controller.py` | 手書き |
 | **shim** | システムコール横取り | `libfpgashim.c` | **自動生成** |
 | **sim** | Verilator実行環境 | `sim_main.cpp` | **自動生成** |
 | **rtl** | 回路ロジック (Verilog) | `vfpga_top_skeleton.v` | **自動生成** |
@@ -21,7 +21,6 @@
 
 ### 1. controller (Python)
 - **vlogic_controller.py**: プロジェクトの心臓部。共有メモリの初期化、RTLシミュレータの起動監視、UARTブリッジの管理を行います。
-- **dashboard_server.py**: レジスタの状態をブラウザで見るための Web API / UI サーバーです。
 
 ### 2. shim (C)
 - **libfpgashim.c**: アプリケーションの `open`, `mmap`, `ioctl` をフックして共有メモリにリダイレクトします。

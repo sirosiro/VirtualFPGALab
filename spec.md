@@ -23,7 +23,7 @@ Linuxのシステムコール・フッキング技術を用いてハードウェ
 | **インターセプト・シム** | システムコールを横取りする「窓口」 | **Linux カーネル・ドライバ** | `libfpgashim.c` (DTSより自動生成) |
 | **RTL シミュレーション** | 回路ロジックを実行する「実体」 | **FPGA PL (回路)** | `vfpga_top.v` (DTSより自動生成) |
 | **バックエンド管理** | 共有メモリを確保し全体を繋ぐ | **AXI Bus / メモリマップ** | `vlogic_controller.py` (DTS駆動) |
-| **ダッシュボード** | レジスタの状態を可視化する | **JTAG / ロジックアナライザ** | `dashboard_server.py` |
+| **ダッシュボード** | レジスタの状態を可視化する | **JTAG / ロジックアナライザ** | `dashboard/server.js` |
 | **ビルド・テスト環境** | アプリの構築と動作検証 | **SDK / 評価ボード** | `Makefile`, `tests/scenarios/*/Makefile`, `run_tests.sh` |
 
 ### 3.2. アーキテクチャ図 (Visual Overview)
@@ -68,7 +68,7 @@ graph TD
 
 ### 4.3. Logic Visualization & Diagnostic Tool (The Dashboard)
 - **責務:** 共有メモリ内のレジスタ状態をリアルタイムで監視・可視化する。
-- **アクセス:** `python3 src/controller/dashboard_server.py` を起動し、ブラウザから **`http://127.0.0.1:8080`** へアクセスする（VS Code 環境では自動的にポート転送される）。
+- **アクセス:** `node dashboard/server.js` を起動し、ブラウザから **`http://127.0.0.1:8080`** へアクセスする（VS Code 環境では自動的にポート転送される）。
 - **意義:** 実機のデバッガを繋ぐことなく、ブラウザから内部状態を把握できる。
 
 ### 4.4. RTL-C++ Integrated Bridge (Verilator Interface)
