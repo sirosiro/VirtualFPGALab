@@ -27,14 +27,16 @@ RUN apt-get update && apt-get install -y \
 # Install Verilator
 RUN apt-get update && apt-get install -y verilator
 
-# Install Python packages for visualization and testing
+# Install Node.js v20 for Dashboard
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs
+
+# Install Python packages for testing
 RUN pip3 install --no-cache-dir \
     numpy \
     pandas \
     matplotlib \
-    pytest \
-    flask \
-    flask-cors
+    pytest
 
 # Set workspace directory
 WORKDIR /workspace

@@ -24,7 +24,7 @@ cleanup_processes() {
     echo -e "\n[Runner] Stopping background processes..."
     pkill -9 -f vlogic_controller || true
     pkill -9 -f Vvfpga_top || true
-    pkill -9 -f dashboard_server || true
+    pkill -9 -f "dashboard/server.js" || true
 }
 
 # --- Argument Parsing ---
@@ -75,14 +75,11 @@ start_environment() {
         cp "${scenario_dir}/"*.v src/rtl/
     fi
 
-    # vfpga_top.v が存在しない場合はスケルトンを使用する
+    # vfpga_top.v が存在しない場合はエラー
     if [ ! -f "src/rtl/vfpga_top.v" ]; then
-        echo "[Runner] vfpga_top.v not found. Using default RTL skeleton."
-        cp src/rtl/vfpga_top_skeleton.v src/rtl/vfpga_top.v
+        echo "[Runner] Error: vfpga_top.v not generated."
+        exit 1
     fi
-
-    # 重複を避けるため、スケルトンファイルは削除しておく
-    rm -f src/rtl/vfpga_top_skeleton.v
     
     make libfpgashim.so -j$(nproc) || exit 1
     make engine -j$(nproc) || exit 1

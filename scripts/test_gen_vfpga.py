@@ -1,7 +1,7 @@
 import unittest
 import os
 import sys
-from gen_vfpga import DTSParser, BoardModel, ConfigGenerator, ShimGenerator, RTLGenerator
+from gen_vfpga import DTSParser, BoardModel, ConfigGenerator, ShimGenerator, RTLGenerator, SimulatorGenerator, ManifestGenerator
 
 class TestVFPGAEngine(unittest.TestCase):
     def setUp(self):
@@ -74,6 +74,17 @@ class TestVFPGAEngine(unittest.TestCase):
         self.assertIn("output reg [31:0] EN", content)
         self.assertIn("output reg [31:0] RST", content)
         self.assertIn("32'h14: EN <= w_data;", content)
+
+    def test_manifest_generator(self):
+        import json
+        model = DTSParser.parse("test_sample.dts")
+        gen = ManifestGenerator()
+        content = gen.generate(model)
+        manifest = json.loads(content)
+        self.assertEqual(manifest["board"], "vfpga_reg")
+        self.assertEqual(manifest["shm_path"], "/tmp/vfpga_reg")
+        self.assertTrue(any(d["name"] == "vfpga_reg" for d in manifest["devices"]))
+        self.assertTrue(any(d["type"] == "i2c" for d in manifest["devices"]))
 
 if __name__ == "__main__":
     unittest.main()

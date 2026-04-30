@@ -15,4 +15,4 @@ services:
     tty: true
     stdin_open: true
     working_dir: /workspace
-    command: /bin/bash -c "./tests/run_tests.sh --interactive"
+    command: /bin/bash -c "chmod +x start_lab.sh && ./start_lab.sh tests/scenarios/01_standard_uio"

@@ -33,3 +33,11 @@ DESIGN_PHILOSOPHY.md
 # Test
 /sandbox/*
 !/sandbox/.gitkeep
+dashboard/data/
+dashboard/node_modules/
+dashboard/client/node_modules/
+dashboard/client/dist/
+logs/
+vfpga_sim
+libfpgashim.so
+board_manifest.json

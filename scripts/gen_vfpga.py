@@ -21,10 +21,17 @@ class Device:
         self.base_reg = base_reg
         self.registers = []
         self.extra_props = {}
+        # Parse size from base_reg (e.g. "0x40000000 0x1000")
+        try:
+            parts = base_reg.split()
+            self.size = int(parts[1], 0) if len(parts) >= 2 else 0
+        except:
+            self.size = 0
 
 class BoardModel:
-    def __init__(self, devices):
+    def __init__(self, devices, name="vfpga"):
         self.devices = devices
+        self.name = name
     def get_uio_device(self):
         return next((d for d in self.devices if d.type == 'uio'), None)
 
@@ -72,7 +79,13 @@ class DTSParser:
                             reg_offset = reg_parts[1].strip()
                             device.registers.append(Register(reg_name, reg_offset, 'RW'))
                 devices.append(device)
-        return BoardModel(devices)
+        
+        # 共有メモリ名として使用するボード名を決定（UIOデバイス名があれば優先）
+        board_name = "vfpga_reg"
+        uio = next((d for d in devices if d.type == 'uio'), None)
+        if uio: board_name = uio.name
+        
+        return BoardModel(devices, name=board_name)
 
 # =============================================================================
 # 3. Generators
@@ -306,21 +319,45 @@ int main(int argc, char** argv) {
 }
 """ % (", ".join(reg_defs), len(reg_defs), len(reg_defs))
 
+class ManifestGenerator(BaseGenerator):
+    def generate(self, model: BoardModel):
+        import json
+        manifest = {
+            "board": model.name,
+            "shm_path": f"/tmp/{model.name}",
+            "shm_size": model.get_uio_device().size if model.get_uio_device() else 1024,
+            "devices": []
+        }
+        for dev in model.devices:
+            dev_info = {
+                "name": dev.name,
+                "type": dev.type,
+                "path": dev.path,
+                "base_reg": dev.base_reg,
+                "registers": [{"name": r.name, "offset": r.offset} for r in dev.registers],
+                "extra": dev.extra_props
+            }
+            manifest["devices"].append(dev_info)
+        return json.dumps(manifest, indent=4)
+
 class GeneratorOrchestrator:
     def __init__(self, model: BoardModel):
         self.model = model
         self.generators = {
             "src/include/vfpga_config.h": ConfigGenerator(),
             "src/shim/libfpgashim.c": ShimGenerator(),
-            "src/rtl/vfpga_top_skeleton.v": RTLGenerator(),
-            "src/sim/sim_main.cpp": SimulatorGenerator()
+            "src/rtl/vfpga_top.v": RTLGenerator(),
+            "src/sim/sim_main.cpp": SimulatorGenerator(),
+            "dashboard/data/board_manifest.json": ManifestGenerator()
         }
     def generate_all(self):
         for path, gen in self.generators.items():
             content = gen.generate(self.model)
-            if content:
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                with open(path, 'w') as f: f.write(content)
+            dir_name = os.path.dirname(path)
+            if dir_name:
+                os.makedirs(dir_name, exist_ok=True)
+            with open(path, "w") as f:
+                f.write(content)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2: sys.exit(1)
