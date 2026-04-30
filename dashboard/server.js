@@ -53,7 +53,7 @@ function broadcastRegisters() {
     
     const regData = [];
     manifest.devices.forEach(dev => {
-        if (dev.type === 'uio') {
+        if (dev.type === 'uio' || dev.type === 'gpio') {
             dev.registers.forEach(reg => {
                 const offset = parseInt(reg.offset, 0);
                 if (offset + 4 <= shmBuffer.length) {

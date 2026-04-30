@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { Activity, Cpu, Hash, Clock, Box, Terminal as TerminalIcon, Send, AlertCircle } from 'lucide-react';
+import { Activity, Cpu, Hash, Clock, Box, Terminal as TerminalIcon, Send, AlertCircle, ToggleRight } from 'lucide-react';
 import './App.css';
 
 const socket = io('http://' + window.location.hostname + ':8080');
@@ -54,6 +54,7 @@ function App() {
   };
 
   const hasRegisters = registers.length > 0;
+  const gpioDevices = manifest?.devices?.filter(d => d.type === 'gpio') || [];
 
   return (
     <div className="dashboard-container">
@@ -85,6 +86,34 @@ function App() {
                 </div>
               ))}
             </div>
+            
+            {gpioDevices.map((dev, i) => {
+              const dataReg = registers.find(r => r.deviceName === dev.name && r.name.startsWith('DATA'));
+              const triReg = registers.find(r => r.deviceName === dev.name && r.name.startsWith('TRI'));
+              
+              if (!dataReg || !triReg) return null;
+              
+              const dataVal = dataReg.decimal || 0;
+              const triVal = triReg.decimal || 0;
+              
+              return (
+                <div key={`gpio-${i}`} className="gpio-panel">
+                  <div className="panel-header"><ToggleRight size={16} /> GPIO: {dev.name}</div>
+                  <div className="gpio-bits">
+                    {Array.from({ length: 8 }).map((_, bitIndex) => {
+                      const isInput = (triVal & (1 << bitIndex)) !== 0;
+                      const isOn = (dataVal & (1 << bitIndex)) !== 0;
+                      return (
+                        <div key={bitIndex} className={`gpio-bit ${isInput ? 'input' : 'output'} ${isOn ? 'on' : 'off'}`}>
+                          <div className="gpio-indicator"></div>
+                          <span className="gpio-label">B{bitIndex}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </aside>
         )}
 
@@ -193,6 +222,14 @@ function App() {
         .reg-info { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.7rem; color: #8b949e; }
         .reg-name { color: #e6edf3; font-weight: 600; font-size: 0.85rem; }
         .reg-val { font-family: 'JetBrains Mono', monospace; font-size: 1.2rem; color: #58a6ff; }
+
+        .gpio-panel { margin-top: 1rem; border-top: 1px solid #30363d; }
+        .gpio-bits { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 1rem; }
+        .gpio-bit { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
+        .gpio-indicator { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #30363d; background: #0d1117; }
+        .gpio-bit.output.on .gpio-indicator { background: #3fb950; border-color: #2ea043; box-shadow: 0 0 8px rgba(63, 185, 80, 0.4); }
+        .gpio-bit.input.on .gpio-indicator { background: #58a6ff; border-color: #388bfd; box-shadow: 0 0 8px rgba(88, 166, 255, 0.4); }
+        .gpio-label { font-size: 0.6rem; color: #8b949e; font-weight: 600; }
 
         .terminal-section { min-width: 0; position: relative; }
         .tab-group { display: flex; align-items: center; gap: 0.5rem; }

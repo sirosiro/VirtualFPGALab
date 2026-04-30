@@ -65,6 +65,7 @@ class DTSParser:
                 if 'generic-uio' in compatible: dev_type = 'uio'
                 elif 'i2c' in compatible or 'cdns,i2c' in compatible: dev_type = 'i2c'
                 elif 'uart' in compatible or 'xlnx,xps-uart' in compatible: dev_type = 'uart'
+                elif 'gpio' in compatible or 'xlnx,xps-gpio' in compatible: dev_type = 'gpio'
                 device = Device(name, label, dev_type, props.get('reg', '0x0 0x0'))
                 for k, v in props.items():
                     if k not in ['label', 'compatible', 'reg', 'registers']: device.extra_props[k] = v
@@ -117,7 +118,7 @@ class ShimGenerator(BaseGenerator):
     def generate(self, model: BoardModel):
         mmap_routes, i2c_matches, uart_matches = [], [], []
         for i, dev in enumerate(model.devices):
-            if dev.type == 'uio':
+            if dev.type in ['uio', 'gpio']:
                 reg_parts = dev.base_reg.split()
                 if len(reg_parts) >= 2:
                     mmap_routes.append('    { %s, %s, SHM_FILE, "%s" }' % (reg_parts[0], reg_parts[1], dev.path))
