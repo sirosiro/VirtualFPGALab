@@ -34,33 +34,24 @@ int main() {
         return 1;
     }
 
-    printf("[Main] REG0 (オフセット0) に 0x100 を書き込みます\n");
-    map_base[REG_0] = 0x100;
+    // テスト用の値を書き込みます
+    uint32_t test_val = 0x1000;
+    uint32_t expected = test_val + 0x1234; // RTL: reg0 + 0x0 + 0x1234
 
-    printf("[Main] REG1 (オフセット4) を読み出します\n");
-    
-    /**
-     * Verilog 側の構造:
-     * vfpga_top.v が sub_logic.v をインスタンス化しています。
-     * sub_logic 内では以下の演算が行われています:
-     *   out_y = in_a (REG0の値) + in_b (現在の書き込みデータ) + 0x1234;
-     */
-    
-    // シミュレーション上のタイミングを安定させるため、再度書き込みを行ってから値を読み出します。
-    map_base[REG_0] = 0x10; 
-    
+    printf("[Main] REG0 (オフセット0) に 0x%08x を書き込みます\n", test_val);
+    map_base[REG_0] = test_val;
+
+    printf("[Main] REG1 (オフセット4) から演算結果を読み出します\n");
     uint32_t val = map_base[REG_1];
-    printf("[Main] 読み出し値: 0x%08x\n", val);
+    printf("[Main] 読み出し値: 0x%08x (期待値: 0x%08x)\n", val, expected);
 
-    // サブモジュールが正しくリンクされて動作していれば、
-    // sub_logic.v 内で定義された定数 0x1234 を含む値（非ゼロ）が返ってきます。
-    if (val != 0) {
-        printf("[Main] 成功: サブモジュールの演算結果を確認しました！\n");
+    if (val == expected) {
+        printf("[Main] 成功: サブモジュールの正確な演算結果を確認しました！\n");
         munmap(map_base, 4096);
         close(fd);
         return 0;
     } else {
-        printf("[Main] 失敗: サブモジュールの出力が 0 です。リンクまたは演算に問題があります。\n");
+        printf("[Main] 失敗: 演算結果が不正確です (期待値: 0x%08x, 実測値: 0x%08x)\n", expected, val);
         munmap(map_base, 4096);
         close(fd);
         return 1;
