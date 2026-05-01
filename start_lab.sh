@@ -1,55 +1,73 @@
 #!/bin/bash
 
-# VirtualFPGALab: Integrated Launcher
-# Usage: ./start_lab.sh [scenario_dir]
-unset LD_PRELOAD
+# VirtualFPGALab Integrated Launcher
+# Usage: ./start_lab.sh <scenario_dir>
 
-SCENARIO_DIR=${1:-"tests/scenarios/01_standard_uio"}
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <scenario_dir>"
+    exit 1
+fi
+
+SCENARIO_DIR=$1
 DTS_PATH="${SCENARIO_DIR}/config.dts"
-
-# 実行モードの設定（03シナリオ等での対話モードを有効化）
-export VFPGA_INTERACTIVE=1
-
-echo "===================================================="
-echo "   VirtualFPGALab Integrated Launcher"
-echo "   Scenario: ${SCENARIO_DIR}"
-echo "===================================================="
-
-# 1. 準備とクリーンアップ
-echo "[0/3] Cleaning up previous state..."
-pkill -f vlogic_controller || true
-pkill -f Vvfpga_top || true
-pkill -f test_bin || true
-pkill -f "node dashboard/server.js" || true
-rm -f libfpgashim.so
-rm -rf obj_dir
-rm -f dashboard/data/*.json
-rm -f /tmp/vfpga_*
-make clean > /dev/null 2>&1 || true
 
 if [ ! -f "${DTS_PATH}" ]; then
     echo "[Error] DTS file not found: ${DTS_PATH}"
     exit 1
 fi
 
+# 以前の実行で設定された可能性があるLD_PRELOADを解除
+unset LD_PRELOAD
+
+# クリーンアップ関数
+cleanup() {
+    echo ""
+    echo "Stopping background processes..."
+    [ -n "$CONTROLLER_PID" ] && kill $CONTROLLER_PID 2>/dev/null
+    [ -n "$SIM_PID" ] && kill $SIM_PID 2>/dev/null
+    [ -n "$DASHBOARD_PID" ] && kill $DASHBOARD_PID 2>/dev/null
+    pkill test_bin 2>/dev/null
+    
+    # 共有メモリファイルとマニフェストの削除
+    echo "Cleaning up temporary files..."
+    rm -f /tmp/vfpga_* 2>/dev/null
+    rm -f dashboard/data/board_manifest.json 2>/dev/null
+    
+    echo "Done."
+    exit
+}
+
+trap cleanup SIGINT SIGTERM
+
+echo "===================================================="
+echo "   VirtualFPGALab Integrated Launcher"
+echo "   Scenario: ${SCENARIO_DIR}"
+echo "===================================================="
+
+# 1. 準備
+echo "[0/3] Cleaning up previous state..."
+make clean > /dev/null 2>&1
+
 # 2. 生成とビルド
 echo "[1/3] Generating code and building artifacts..."
+
+# コード生成
 python3 scripts/gen_vfpga.py "${DTS_PATH}" || exit 1
 
-# シナリオ固有のVerilogファイルをコピー
-cp ${SCENARIO_DIR}/*.v src/rtl/ 2>/dev/null
+# シナリオ固有のVerilogファイルがあればsrc/rtlにコピーする
+if [ "$(ls ${SCENARIO_DIR}/*.v 2>/dev/null)" ]; then
+    cp ${SCENARIO_DIR}/*.v src/rtl/
+fi
 
-# シミュレータのビルド
-gcc -Wall -Wextra -fPIC -Isrc/include -shared -ldl -o libfpgashim.so src/shim/libfpgashim.c
-# RTL内の全ファイルを対象にする
-V_FILES=$(ls src/rtl/*.v)
-verilator -Wall --cc --exe -CFLAGS "-I../src/include" ${V_FILES} src/sim/sim_main.cpp > /dev/null 2>&1
-make -C obj_dir -f Vvfpga_top.mk > /dev/null 2>&1
+# シミュレータとShimのビルド
+make engine || { echo "[Error] Simulator build failed!"; exit 1; }
+
+# シミュレータをカレントにコピー（利便性のため）
 rm -f ./vfpga_sim
 cp obj_dir/Vvfpga_top ./vfpga_sim
 
 # アプリケーションのビルド
-make -C "${SCENARIO_DIR}" > /dev/null 2>&1
+make -C "${SCENARIO_DIR}" || { echo "[Error] App build failed!"; exit 1; }
 
 # 3. 起動
 echo "[2/3] Starting background processes..."
@@ -59,10 +77,11 @@ LOG_DIR="logs"
 mkdir -p ${LOG_DIR}
 
 # バックエンドプロセスの起動
-python3 -u src/controller/vlogic_controller.py "${SCENARIO_DIR}/config.dts" > ${LOG_DIR}/controller.log 2>&1 &
+python3 -u src/controller/vlogic_controller.py "${DTS_PATH}" > ${LOG_DIR}/controller.log 2>&1 &
 CONTROLLER_PID=$!
 
-obj_dir/Vvfpga_top > ${LOG_DIR}/sim.log 2>&1 &
+# シミュレータの起動（波形出力 vfpga.vcd が有効化されている）
+./vfpga_sim > ${LOG_DIR}/sim.log 2>&1 &
 SIM_PID=$!
 
 node dashboard/server.js > ${LOG_DIR}/dashboard.log 2>&1 &
@@ -86,13 +105,13 @@ echo "  UART Console  : localhost:2000 (if enabled)"
 echo "----------------------------------------------------"
 echo "Press Ctrl+C to stop the lab (after app exits)."
 
-# FWアプリケーションの起動（対話モードをサポートするためフォアグラウンドで実行）
+# FWアプリケーションの起動
 echo ""
 echo "   Starting firmware application..."
+export VFPGA_INTERACTIVE=1
 LD_PRELOAD="$PWD/libfpgashim.so" "${SCENARIO_DIR}/test_bin"
 
 # アプリ終了後もバックエンドの状態を監視し続ける
-# プロセスの監視
 while true; do
     if ! kill -0 ${CONTROLLER_PID} 2>/dev/null || \
        ! kill -0 ${SIM_PID} 2>/dev/null || \

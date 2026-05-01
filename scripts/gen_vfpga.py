@@ -33,7 +33,7 @@ class BoardModel:
         self.devices = devices
         self.name = name
     def get_uio_device(self):
-        return next((d for d in self.devices if d.type == 'uio'), None)
+        return next((d for d in self.devices if d.type in ['uio', 'gpio']), None)
 
 # =============================================================================
 # 2. Parser
