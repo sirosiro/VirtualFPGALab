@@ -10,7 +10,7 @@ RTL_SRCS = $(RTL_TOP) $(filter-out $(RTL_TOP), $(wildcard src/rtl/*.v))
 
 # Verilator
 VERILATOR = verilator
-VERILATOR_FLAGS = -Wall --cc --exe -CFLAGS "-I../src/include"
+VERILATOR_FLAGS = -Wall --cc --exe --trace -CFLAGS "-I../src/include"
 SIM_SRC = src/sim/sim_main.cpp
 SIM_OUT = obj_dir/Vvfpga_top
 
@@ -29,6 +29,8 @@ engine: $(SHIM_OUT) $(SIM_OUT)
 
 clean:
 	rm -f $(SHIM_OUT)
+	rm -f vfpga_sim
+	rm -f vfpga.vcd
 	rm -f $(SHIM_SRC) src/include/vfpga_config.h
 	rm -f src/sim/sim_main.cpp src/rtl/*.v
 	rm -rf obj_dir

@@ -9,7 +9,9 @@
             "extensions": [
                 "ms-vscode.cpptools",
                 "ms-python.python",
-                "ms-python.vscode-pylance"
+                "ms-python.vscode-pylance",
+                "mshr-h.veriloghdl",
+                "mshr-h.vsc-vcd-viewer"
             ]
         }
     },

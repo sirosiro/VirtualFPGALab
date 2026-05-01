@@ -302,6 +302,7 @@ class SimulatorGenerator(BaseGenerator):
 #include <unistd.h>
 #include <stdint.h>
 #include <string.h>
+#include <verilated_vcd_c.h>
 #include "vfpga_config.h"
 
 struct RegMeta { const char* name; uint32_t offset; };
@@ -317,10 +318,16 @@ int main(int argc, char** argv) {
     }
     uint32_t* shm = (uint32_t*)mmap(NULL, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     uint32_t old_shm[SHM_SIZE/4]; memset(old_shm, 0, SHM_SIZE);
+
+    Verilated::traceEverOn(true);
+    VerilatedVcdC* m_trace = new VerilatedVcdC;
+    top->trace(m_trace, 99);
+    m_trace->open("vfpga.vcd");
+    uint64_t vtime = 0;
     
-    top->rst_n = 1; top->clk = 0; top->eval();
-    top->rst_n = 0; top->eval(); top->clk = 1; top->eval(); top->clk = 0; top->eval();
-    top->rst_n = 1; top->eval();
+    top->rst_n = 1; top->clk = 0; top->eval(); m_trace->dump(vtime++);
+    top->rst_n = 0; top->eval(); top->clk = 1; top->eval(); top->clk = 0; top->eval(); m_trace->dump(vtime++);
+    top->rst_n = 1; top->eval(); m_trace->dump(vtime++);
 
     printf("[Sim] Simulator Started (SHM: %%s)\\n", SHM_FILE); fflush(stdout);
     while (!Verilated::gotFinish()) {
@@ -340,8 +347,10 @@ int main(int argc, char** argv) {
             }
         }
         top->eval(); top->clk = 1; top->eval(); top->clk = 0; top->eval();
+        m_trace->dump(vtime++);
         usleep(100);
     }
+    m_trace->close();
     return 0;
 }
 """ % (", ".join(reg_defs), len(reg_defs), len(reg_defs))

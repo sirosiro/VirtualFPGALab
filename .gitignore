@@ -41,3 +41,4 @@ logs/
 vfpga_sim
 libfpgashim.so
 board_manifest.json
+*.vcd
