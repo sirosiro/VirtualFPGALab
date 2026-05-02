@@ -51,23 +51,29 @@ function updateShm() {
 function broadcastRegisters() {
     if (!shmBuffer || !manifest.devices) return;
     
+    // SHMベースアドレス: 全UIO/GPIOデバイスの最小ベースアドレス
+    const uioGpioDevs = manifest.devices.filter(d => d.type === 'uio' || d.type === 'gpio');
+    if (uioGpioDevs.length === 0) return;
+    const shmBaseAddr = Math.min(...uioGpioDevs.map(d => d.base_addr || 0));
+    
     const regData = [];
-    manifest.devices.forEach(dev => {
-        if (dev.type === 'uio' || dev.type === 'gpio') {
-            dev.registers.forEach(reg => {
-                const offset = parseInt(reg.offset, 0);
-                if (offset + 4 <= shmBuffer.length) {
-                    const value = shmBuffer.readUInt32LE(offset);
-                    regData.push({
-                        name: reg.name,
-                        offset: reg.offset,
-                        value: `0x${value.toString(16).padStart(8, '0')}`,
-                        decimal: value,
-                        deviceName: dev.name
-                    });
-                }
-            });
-        }
+    uioGpioDevs.forEach(dev => {
+        const devBaseAddr = dev.base_addr || 0;
+        dev.registers.forEach(reg => {
+            const regOffset = parseInt(reg.offset, 0);
+            const physAddr = devBaseAddr + regOffset;
+            const shmOffset = physAddr - shmBaseAddr;
+            if (shmOffset >= 0 && shmOffset + 4 <= shmBuffer.length) {
+                const value = shmBuffer.readUInt32LE(shmOffset);
+                regData.push({
+                    name: reg.name,
+                    offset: reg.offset,
+                    value: `0x${value.toString(16).padStart(8, '0')}`,
+                    decimal: value,
+                    deviceName: dev.name
+                });
+            }
+        });
     });
     io.emit('registers', regData);
 }

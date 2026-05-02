@@ -104,6 +104,12 @@ start_environment() {
 for scenario in ${SCENARIOS_DIR}/*; do
     if [ ! -d "${scenario}" ]; then continue; fi
     
+    # Skip showcase scenarios starting with 'S'
+    if [[ $(basename "${scenario}") == S* ]]; then
+        echo "[Runner] Skipping showcase scenario: $(basename ${scenario})"
+        continue
+    fi
+    
     start_environment "${scenario}"
     
     # Build the scenario via Makefile

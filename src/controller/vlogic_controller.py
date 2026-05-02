@@ -27,15 +27,26 @@ def get_shm_info_from_dts(dts_path):
             body = match.group(2)
             
             comp_match = re.search(r'compatible\s*=\s*"([^"]+)"', body)
+            label_match = re.search(r'label\s*=\s*"([^"]+)"', body)
             is_uio = False
-            if comp_match and 'generic-uio' in comp_match.group(1):
+            is_gpio = False
+            if comp_match:
+                compat = comp_match.group(1)
+                if 'generic-uio' in compat:
+                    is_uio = True
+                elif 'gpio' in compat or 'xlnx,xps-gpio' in compat:
+                    is_gpio = True
+            # label が /dev/uio で始まるデバイスも UIO として扱う (カスタムIP対応)
+            if not is_uio and not is_gpio and label_match and label_match.group(1).startswith('/dev/uio'):
                 is_uio = True
             
-            reg_match = re.search(r'reg\s*=\s*<[^ ]+\s+([^>]+)>', body)
+            reg_match = re.search(r'reg\s*=\s*<([^>]+)>', body)
             if reg_match:
                 try:
-                    size = int(reg_match.group(1).strip(), 0)
-                    regions.append({'name': name, 'size': size, 'is_uio': is_uio})
+                    parts = reg_match.group(1).strip().split()
+                    base_addr = int(parts[0], 0)
+                    size = int(parts[1], 0) if len(parts) >= 2 else 0
+                    regions.append({'name': name, 'base_addr': base_addr, 'size': size, 'is_uio': is_uio, 'is_gpio': is_gpio})
                 except:
                     continue
     except Exception as e:
@@ -92,29 +103,36 @@ def update_uart_map(active_bridges):
         print(f"[Python] Error updating UART map: {e}")
 
 def uart_discovery_thread():
+    # key: uart_file_path -> (pts_path, thread, port)
     active_bridges = {}
     base_port = 2000
+    next_port = base_port
     print("[Python] UART Discovery thread started.")
     while True:
         glob_pattern = os.path.join(PROJECT_ROOT, "dashboard/data/vfpga_uart_*")
         files = glob.glob(glob_pattern)
         changed = False
         for f in files:
-            if f not in active_bridges:
-                try:
-                    with open(f, 'r') as f_ptr:
-                        pts_path = f_ptr.read().strip()
-                    port = base_port + len(active_bridges)
-                    t = threading.Thread(target=uart_bridge_thread, args=(pts_path, port), daemon=True)
-                    t.start()
-                    active_bridges[f] = port
-                    print(f"[Python] UART Found: {f} -> {pts_path} (TCP Port {port})")
-                    changed = True
-                except Exception as e:
-                    print(f"[Python] Error starting bridge for {f}: {e}")
-        
+            try:
+                with open(f, 'r') as f_ptr:
+                    pts_path = f_ptr.read().strip()
+            except Exception:
+                continue
+
+            existing = active_bridges.get(f)
+            # PTSパスが変わった、またはスレッドが終了していたら再起動
+            if existing is None or existing[0] != pts_path or not existing[1].is_alive():
+                port = existing[2] if existing else next_port
+                if existing is None:
+                    next_port += 1
+                t = threading.Thread(target=uart_bridge_thread, args=(pts_path, port), daemon=True)
+                t.start()
+                active_bridges[f] = (pts_path, t, port)
+                print(f"[Python] UART Found: {f} -> {pts_path} (TCP Port {port})")
+                changed = True
+
         if changed:
-            update_uart_map(active_bridges)
+            update_uart_map({f: v[2] for f, v in active_bridges.items()})
         time.sleep(1)
 
 def main():
@@ -129,10 +147,26 @@ def main():
     dts_path = sys.argv[1]
     regions = get_shm_info_from_dts(dts_path)
     
-    # ジェネレータ側のロジックと合わせる
+    # ジェネレータ側のロジックと合わせる (gen_vfpga.py と同じ計算)
+    uio_gpio_devs = [r for r in regions if r.get('is_uio') or r.get('is_gpio')]
+    
+    # ボード名: UIO > GPIO > デフォルト
     uio = next((r for r in regions if r.get('is_uio')), None)
-    board_name = uio['name'] if uio else "vfpga_reg"
-    board_size = uio['size'] if uio else (regions[0]['size'] if regions else 1024)
+    if uio:
+        board_name = uio['name']
+    else:
+        gpio = next((r for r in regions if r.get('is_gpio')), None)
+        board_name = gpio['name'] if gpio else "vfpga_reg"
+    
+    # SHMサイズ: 全UIO/GPIOデバイスの物理アドレス範囲をカバー
+    if len(uio_gpio_devs) == 0:
+        board_size = 1024
+    elif len(uio_gpio_devs) == 1:
+        board_size = uio_gpio_devs[0]['size']
+    else:
+        min_addr = min(d['base_addr'] for d in uio_gpio_devs)
+        max_end = max(d['base_addr'] + d['size'] for d in uio_gpio_devs)
+        board_size = max_end - min_addr
 
     print(f"[Python] Starting Generic Virtual Logic Controller...")
     print(f"[Python] Using DTS: {dts_path}")

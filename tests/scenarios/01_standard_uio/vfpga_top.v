@@ -36,8 +36,8 @@ module vfpga_top (
             EN  <= 32'h0;
         end else if (w_en) begin
             case (addr)
-                32'h10: RST <= w_data;
-                32'h14: EN  <= w_data;
+                32'h40000010: RST <= w_data;
+                32'h40000014: EN  <= w_data;
                 default: ;
             endcase
         end
@@ -49,9 +49,9 @@ module vfpga_top (
     // Read Logic
     always @(*) begin
         case (addr)
-            32'h10: r_data = RST;
-            32'h14: r_data = EN;
-            32'h18: r_data = CNT;
+            32'h40000010: r_data = RST;
+            32'h40000014: r_data = EN;
+            32'h40000018: r_data = CNT;
             default: r_data = 32'hdeadbeef;
         endcase
     end

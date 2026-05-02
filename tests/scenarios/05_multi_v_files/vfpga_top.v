@@ -36,7 +36,7 @@ module vfpga_top (
     always @(posedge clk) begin
         if (!rst_n) begin
             reg0 <= 32'h0;
-        end else if (w_en && addr == 32'h0) begin
+        end else if (w_en && addr == 32'h40000000) begin
             reg0 <= w_data;
         end
     end
@@ -45,6 +45,6 @@ module vfpga_top (
      * 【解説: 読み出しロジック】
      * アドレス 0x4 (REG1) を読み出した際に、サブモジュールの結果を返します。
      */
-    assign r_data = (addr == 32'h4) ? sub_out : reg0;
+    assign r_data = (addr == 32'h40000004) ? sub_out : reg0;
 
 endmodule
