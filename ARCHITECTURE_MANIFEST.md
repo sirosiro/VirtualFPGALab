@@ -18,6 +18,10 @@
 - **リスク:** 実機ドライバの複雑な挙動を再現しきれない。
 - **対策:** 実機でのパケットログをキャプチャし、エミュレータ側で「リプレイ」できるテスト機構を設計に含める。
 
+### 4. サブ・マニフェスト (Sub-Manifests)
+- **[Scripts Generator](./scripts/ARCHITECTURE_MANIFEST.md)**: DTS から環境を自動生成するコア・ロジックの設計。
+- **[Dashboard Interface](./dashboard/ARCHITECTURE_MANIFEST.md)**: 診断ダッシュボードと可視化レイヤーの設計。
+
 ---
 
 ## Part 2: マニフェスト本体 (Content)
