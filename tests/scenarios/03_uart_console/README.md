@@ -39,7 +39,7 @@ graph TD
 
 ## なぜ Verilog (.v) ファイルがないのか？
 
-`02_multi_i2c` と同様に、このUARTコントローラ（`xlnx,xps-uartlite-1.00.a`）はSoCに内蔵された**ハードIP（PS側の機能）**を想定しています。そのため、ユーザーがVerilogで回路を記述する必要はありません。
+この UART コントローラ（`xlnx,xps-uartlite-1.00.a`）は、FPGA の PL (Programmable Logic) 側に配置される「標準IP（既製品の回路データ）」として扱われます。VirtualFPGALab では、このような標準的なデバイスに対しては、システム側で自動的にエミュレーション・ロジックを割り当てるため、学習者が自分で Verilog を記述する必要はありません。
 
 ## 実行方法
 
