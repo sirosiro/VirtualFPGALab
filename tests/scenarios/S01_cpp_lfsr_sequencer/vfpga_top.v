@@ -5,16 +5,15 @@ module vfpga_top (
     input  wire [31:0] addr,
     input  wire [31:0] w_data,
     input  wire        w_en,
-    output reg  [31:0] r_data,
-    // GPIO Registers
-    output reg  [31:0] DATA,
-    output reg  [31:0] TRI,
-    // Custom Engine Registers
-    output reg  [31:0] CTRL,
-    output reg  [31:0] SPEED,
-    output reg  [31:0] STATUS
+    output reg  [31:0] r_data
 );
 
+    // GPIO Registers
+    reg  [31:0] DATA;
+    reg  [31:0] TRI;
+    // Custom Engine Registers
+    reg  [31:0] CTRL;
+    reg  [31:0] SPEED;
     wire [31:0] engine_out;
     
     // Instantiate Custom Pattern Engine
@@ -48,9 +47,6 @@ module vfpga_top (
 
     // Register Read Logic & Data Routing
     always @(*) begin
-        // Update STATUS register with actual engine output
-        STATUS = engine_out;
-        
         case (addr)
             32'h41200000: r_data = (CTRL[0]) ? engine_out : DATA; // Mix: HW or SW
             32'h41200004: r_data = TRI;

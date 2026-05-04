@@ -63,10 +63,6 @@ fi
 # シミュレータとShimのビルド
 make engine || { echo "[Error] Simulator build failed!"; exit 1; }
 
-# シミュレータをカレントにコピー（利便性のため）
-rm -f ./vfpga_sim
-cp obj_dir/Vvfpga_top ./vfpga_sim
-
 # アプリケーションのビルド
 make -C "${SCENARIO_DIR}" || { echo "[Error] App build failed!"; exit 1; }
 

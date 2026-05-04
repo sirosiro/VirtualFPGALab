@@ -10,9 +10,10 @@ RTL_SRCS = $(RTL_TOP) $(filter-out $(RTL_TOP), $(wildcard src/rtl/*.v))
 
 # Verilator
 VERILATOR = verilator
-VERILATOR_FLAGS = -Wall --cc --exe --trace -CFLAGS "-I../src/include"
+VERILATOR_ROOT = /usr/share/verilator
+VERILATOR_FLAGS = -Wall --cc --trace -CFLAGS "-I../src/include -std=c++17"
 SIM_SRC = src/sim/sim_main.cpp
-SIM_OUT = obj_dir/Vvfpga_top
+SIM_OUT = vfpga_sim
 
 all: engine
 
@@ -20,10 +21,14 @@ all: engine
 $(SHIM_OUT): $(SHIM_SRC)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
-# Build the Verilator Simulator
+# Build the Verilator Simulator (Decoupled from Verilator's internal C++ parser)
 $(SIM_OUT): $(RTL_SRCS) $(SIM_SRC)
-	$(VERILATOR) $(VERILATOR_FLAGS) $(RTL_SRCS) $(SIM_SRC)
+	$(VERILATOR) $(VERILATOR_FLAGS) $(RTL_SRCS)
 	$(MAKE) -C obj_dir -f Vvfpga_top.mk
+	g++ -std=c++17 -Isrc/include -I$(VERILATOR_ROOT)/include -Iobj_dir \
+		$(VERILATOR_ROOT)/include/verilated.cpp \
+		$(VERILATOR_ROOT)/include/verilated_vcd_c.cpp \
+		$(SIM_SRC) obj_dir/Vvfpga_top__ALL.a -o $(SIM_OUT)
 
 engine: $(SHIM_OUT) $(SIM_OUT)
 

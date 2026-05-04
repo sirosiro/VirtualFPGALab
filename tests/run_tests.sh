@@ -15,7 +15,7 @@ export LANG=C
 # --- Configuration ---
 PROJECT_ROOT=$(pwd)
 CONTROLLER="src/controller/vlogic_controller.py"
-SIMULATOR="obj_dir/Vvfpga_top"
+SIMULATOR="vfpga_sim"
 SHIM="libfpgashim.so"
 SCENARIOS_DIR="tests/scenarios"
 
@@ -23,7 +23,7 @@ SCENARIOS_DIR="tests/scenarios"
 cleanup_processes() {
     echo -e "\n[Runner] Stopping background processes..."
     pkill -9 -f vlogic_controller || true
-    pkill -9 -f Vvfpga_top || true
+    pkill -9 -f vfpga_sim || true
     pkill -9 -f "dashboard/server.js" || true
 }
 

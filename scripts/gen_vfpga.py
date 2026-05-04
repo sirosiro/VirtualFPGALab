@@ -348,11 +348,63 @@ class SimulatorGenerator(BaseGenerator):
 #include <string.h>
 #include <verilated_vcd_c.h>
 #include "vfpga_config.h"
+#include "sim_traits.h"
 
 #define SHM_BASE_ADDR 0x%08xU
 
 struct RegMeta { const char* name; uint32_t addr; };
 static RegMeta registers[] = { %s };
+
+template <typename T>
+void run_sim_loop(T* top, uint32_t* shm, uint32_t* old_shm, VerilatedVcdC* m_trace, uint64_t& vtime) {
+    // Initial Reset Sequence
+    if constexpr (has_rst_n<T>::value) top->rst_n = 1;
+    if constexpr (has_clk<T>::value) top->clk = 0;
+    top->eval(); m_trace->dump(vtime++);
+    
+    if constexpr (has_rst_n<T>::value) top->rst_n = 0;
+    top->eval(); 
+    if constexpr (has_clk<T>::value) { top->clk = 1; top->eval(); top->clk = 0; top->eval(); }
+    m_trace->dump(vtime++);
+    
+    if constexpr (has_rst_n<T>::value) top->rst_n = 1;
+    top->eval(); m_trace->dump(vtime++);
+
+    printf("[Sim] Simulator Started (SHM: %%s)\\n", SHM_FILE); fflush(stdout);
+    while (!Verilated::gotFinish()) {
+        // Synchronize Write from SHM to RTL
+        for (int i = 0; i < %d; i++) {
+            uint32_t off = (registers[i].addr - SHM_BASE_ADDR) / 4;
+            if (shm[off] != old_shm[off]) {
+                if constexpr (has_addr<T>::value) top->addr = registers[i].addr;
+                if constexpr (has_w_data<T>::value) top->w_data = shm[off];
+                if constexpr (has_w_en<T>::value) top->w_en = 1;
+                
+                top->eval(); 
+                if constexpr (has_clk<T>::value) { top->clk = 1; top->eval(); top->clk = 0; top->eval(); }
+                
+                if constexpr (has_w_en<T>::value) top->w_en = 0;
+                old_shm[off] = shm[off];
+            }
+        }
+        // Synchronize Read from RTL to SHM
+        for (int i = 0; i < %d; i++) {
+            if constexpr (has_addr<T>::value) top->addr = registers[i].addr;
+            top->eval();
+            uint32_t off = (registers[i].addr - SHM_BASE_ADDR) / 4;
+            
+            if constexpr (has_r_data<T>::value) {
+                if (top->r_data != old_shm[off]) {
+                    shm[off] = top->r_data; old_shm[off] = top->r_data;
+                }
+            }
+        }
+        top->eval(); 
+        if constexpr (has_clk<T>::value) { top->clk = 1; top->eval(); top->clk = 0; top->eval(); }
+        m_trace->dump(vtime++);
+        usleep(100);
+    }
+}
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
@@ -371,31 +423,8 @@ int main(int argc, char** argv) {
     m_trace->open("vfpga.vcd");
     uint64_t vtime = 0;
     
-    top->rst_n = 1; top->clk = 0; top->eval(); m_trace->dump(vtime++);
-    top->rst_n = 0; top->eval(); top->clk = 1; top->eval(); top->clk = 0; top->eval(); m_trace->dump(vtime++);
-    top->rst_n = 1; top->eval(); m_trace->dump(vtime++);
+    run_sim_loop(top, shm, old_shm, m_trace, vtime);
 
-    printf("[Sim] Simulator Started (SHM: %%s)\\n", SHM_FILE); fflush(stdout);
-    while (!Verilated::gotFinish()) {
-        for (int i = 0; i < %d; i++) {
-            uint32_t off = (registers[i].addr - SHM_BASE_ADDR) / 4;
-            if (shm[off] != old_shm[off]) {
-                top->addr = registers[i].addr; top->w_data = shm[off]; top->w_en = 1;
-                top->eval(); top->clk = 1; top->eval(); top->clk = 0; top->eval();
-                top->w_en = 0; old_shm[off] = shm[off];
-            }
-        }
-        for (int i = 0; i < %d; i++) {
-            top->addr = registers[i].addr; top->eval();
-            uint32_t off = (registers[i].addr - SHM_BASE_ADDR) / 4;
-            if (top->r_data != old_shm[off]) {
-                shm[off] = top->r_data; old_shm[off] = top->r_data;
-            }
-        }
-        top->eval(); top->clk = 1; top->eval(); top->clk = 0; top->eval();
-        m_trace->dump(vtime++);
-        usleep(100);
-    }
     m_trace->close();
     delete[] old_shm;
     return 0;

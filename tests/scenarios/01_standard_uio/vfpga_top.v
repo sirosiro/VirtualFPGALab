@@ -15,15 +15,13 @@ module vfpga_top (
     input wire [31:0] addr,
     input wire [31:0] w_data,
     input wire w_en,
-    output reg [31:0] r_data,
-    
-    // レジスタ用ポート (config.dts の定義と完全に一致させる必要があります)
-    /* verilator lint_off UNUSED */
-    output reg [31:0] RST,
-    output reg [31:0] EN,
-    output reg [31:0] CNT
-    /* verilator lint_on UNUSED */
+    output reg [31:0] r_data
 );
+
+    // 内部レジスタ
+    reg [31:0] RST;
+    reg [31:0] EN;
+    reg [31:0] CNT;
 
     // 【解説: レジスタへの書き込み処理】
     // ソフトウェア(C言語)から書き込み要求 (w_en = 1) が来た際に、
