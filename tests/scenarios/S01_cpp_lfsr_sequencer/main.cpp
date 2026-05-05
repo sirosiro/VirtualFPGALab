@@ -107,7 +107,7 @@ public:
     SystemShell(GpioPeripheral& g, LfsrEngine& e) : gpio(g), engine(e) {}
 
     void run() {
-        std::cout << "--- VirtualFPGALab S01 C++ Showcase Shell ---" << std::endl;
+        std::cout << "--- F-BB S01 C++ Showcase Shell ---" << std::endl;
         std::cout << "Type 'help' for commands." << std::endl;
 
         std::string line;

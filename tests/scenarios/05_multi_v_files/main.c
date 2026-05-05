@@ -19,7 +19,7 @@
 
 int main() {
     // 物理メモリ空間（/dev/mem）へのアクセス。
-    // VirtualFPGALab の Shim 層がこれをインターセプトし、仮想的な共有メモリへリダイレクトします。
+    // F-BB の Shim 層がこれをインターセプトし、仮想的な共有メモリへリダイレクトします。
     int fd = open("/dev/mem", O_RDWR | O_SYNC);
     if (fd < 0) {
         perror("open");

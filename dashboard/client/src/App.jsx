@@ -60,7 +60,7 @@ function App() {
     <div className="dashboard-container">
       <header className="main-header">
         <div className="brand">
-          <span className="logo-text">VirtualFPGALab</span>
+          <span className="logo-text">FPGA-BoardlessBench (F-BB)</span>
           <span className="version-tag">v2.2 Premium</span>
         </div>
         <div className="system-meta">

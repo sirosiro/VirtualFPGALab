@@ -1,10 +1,10 @@
-# /scripts - VirtualFPGALab 司令塔（オートメーション層）
+# /scripts - FPGA-BoardlessBench (F-BB) 司令塔（オートメーション層）
 
 このディレクトリには、Device Tree (DTS) からシミュレーション環境を自動構築するためのコア・スクリプトが収められています。
 
 ## 1. gen_vfpga.py (The Generator)
 
-VirtualFPGALab の中心的なエンジンです。**DTSファイルを唯一の情報源 (Single Source of Truth)** とし、ハードウェア・ソフトウェアの境界（Shim層、RTL、シミュレータ）を自動生成します。
+FPGA-BoardlessBench (F-BB) の中心的なエンジンです。**DTSファイルを唯一の情報源 (Single Source of Truth)** とし、ハードウェア・ソフトウェアの境界（Shim層、RTL、シミュレータ）を自動生成します。
 
 ### 特徴
 - **モジュール設計**: パーサー、データモデル、言語別ジェネレータが分離されており、容易に拡張可能です。

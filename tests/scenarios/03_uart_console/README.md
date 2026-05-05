@@ -4,7 +4,7 @@
 
 ## アーキテクチャ概念図
 
-VirtualFPGALabでは、UARTデバイスへのアクセスをホストOSの「PTY（擬似端末）」へリダイレクトすることで、あたかも本物のシリアルポートに接続しているかのような操作感を提供します。
+FPGA-BoardlessBench (F-BB)では、UARTデバイスへのアクセスをホストOSの「PTY（擬似端末）」へリダイレクトすることで、あたかも本物のシリアルポートに接続しているかのような操作感を提供します。
 
 ```mermaid
 graph TD
@@ -13,7 +13,7 @@ graph TD
         TTY["TTY Driver"]
     end
     
-    subgraph "VirtualFPGALab Shim"
+    subgraph "FPGA-BoardlessBench (F-BB) Shim"
         Shim["Shim Layer<br/>(syscall intercept)"]
     end
 
@@ -39,7 +39,7 @@ graph TD
 
 ## なぜ Verilog (.v) ファイルがないのか？
 
-この UART コントローラ（`xlnx,xps-uartlite-1.00.a`）は、FPGA の PL (Programmable Logic) 側に配置される「標準IP（既製品の回路データ）」として扱われます。VirtualFPGALab では、このような標準的なデバイスに対しては、システム側で自動的にエミュレーション・ロジックを割り当てるため、学習者が自分で Verilog を記述する必要はありません。
+この UART コントローラ（`xlnx,xps-uartlite-1.00.a`）は、FPGA の PL (Programmable Logic) 側に配置される「標準IP（既製品の回路データ）」として扱われます。FPGA-BoardlessBench (F-BB) では、このような標準的なデバイスに対しては、システム側で自動的にエミュレーション・ロジックを割り当てるため、学習者が自分で Verilog を記述する必要はありません。
 
 ## 実行方法
 

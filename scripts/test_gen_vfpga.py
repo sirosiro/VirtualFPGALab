@@ -51,15 +51,15 @@ class TestVFPGAEngine(unittest.TestCase):
         model = DTSParser.parse("test_sample.dts")
         gen = ConfigGenerator()
         content = gen.generate(model)
-        self.assertIn("#define SHM_PATH \"/tmp/vfpga_reg\"", content)
-        self.assertIn("#define SHM_SIZE 1024", content)
+        self.assertIn("#define SHM_FILE \"/tmp/vfpga_reg\"", content)
+        self.assertIn("#define SHM_SIZE 4096", content)
 
     def test_shim_generator(self):
         model = DTSParser.parse("test_sample.dts")
         gen = ShimGenerator()
         content = gen.generate(model)
         # MMAP ルートの確認
-        self.assertIn("{ 0x40000000, 0x1000, SHM_PATH, \"/dev/uio0\" }", content)
+        self.assertIn("{ 0x40000000, 0x1000, SHM_FILE, \"/dev/uio0\" }", content)
         # I2C マッチングの確認
         self.assertIn("strcmp(pathname, \"/dev/i2c-1\") == 0", content)
         # 基本的な関数の存在確認
@@ -73,7 +73,7 @@ class TestVFPGAEngine(unittest.TestCase):
         self.assertIn("module vfpga_top", content)
         self.assertIn("output reg [31:0] EN", content)
         self.assertIn("output reg [31:0] RST", content)
-        self.assertIn("32'h14: EN <= w_data;", content)
+        self.assertIn("32'h40000014: EN <= w_data;", content)
 
     def test_manifest_generator(self):
         import json

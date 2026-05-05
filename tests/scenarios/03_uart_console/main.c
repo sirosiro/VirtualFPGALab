@@ -38,7 +38,7 @@ int main() {
     // 【解説: データの送信】
     const char *msg = "\r\n"
                       "========================================\r\n"
-                      "   VirtualFPGALab UART Console Shell\r\n"
+                      "   F-BB UART Console Shell\r\n"
                       "========================================\r\n"
                       "Type 'hello' or 'exit'.\r\n"
                       "\r\n"

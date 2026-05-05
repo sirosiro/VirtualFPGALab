@@ -4,7 +4,7 @@ export LC_ALL=C
 export LANG=C
 
 # ==============================================================================
-# VirtualFPGALab Test Runner (Scenario-Based)
+# F-BB Test Runner (Scenario-Based)
 # ==============================================================================
 # Usage:
 #   ./tests/run_tests.sh           : Run all scenarios

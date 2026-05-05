@@ -1,4 +1,4 @@
-# Project: VirtualFPGALab Specification
+# Project: FPGA-BoardlessBench (F-BB) Specification
 
 ## 1. プロジェクトの核心的意図 (Core Intent)
 本プロジェクトの目的は、Xilinx Zynq等のFPGA SoC開発において、物理的なボードへの依存を最小化し、ソフトウェア・エンジニアがLinux環境でFPGAロジックを含めた開発・デバッグを完結させることにある。

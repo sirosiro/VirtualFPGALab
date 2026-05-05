@@ -1,4 +1,4 @@
-# VirtualFPGALab: Scenario Makefile
+# F-BB: Scenario Makefile
 TARGET = test_bin
 
 # コンパイラ設定 (?= を使うことで、PetaLinux等の環境変数を優先できる)

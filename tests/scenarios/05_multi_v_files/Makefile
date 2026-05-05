@@ -1,4 +1,4 @@
-# VirtualFPGALab: Scenario Makefile
+# F-BB: Scenario Makefile
 TARGET = test_bin
 
 CC ?= gcc

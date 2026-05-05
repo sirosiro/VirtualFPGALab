@@ -12,7 +12,7 @@
 
 ```mermaid
 graph TD
-    subgraph "VirtualFPGALab Backend"
+    subgraph "FPGA-BoardlessBench (F-BB) Backend"
         VLogic["vlogic_controller.py"]
         SHM["/tmp/vfpga_shm"]
     end

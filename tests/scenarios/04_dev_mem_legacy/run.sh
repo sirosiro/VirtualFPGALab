@@ -1,5 +1,5 @@
 #!/bin/bash
-# VirtualFPGALab: 04_dev_mem_legacy 実行スクリプト
+# F-BB: 04_dev_mem_legacy 実行スクリプト
 # このスクリプトを叩くだけで、このディレクトリの環境が立ち上がりテストが実行されます。
 # オプション: --clean (または -c) で成果物を削除します。
 

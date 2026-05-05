@@ -13,7 +13,7 @@ graph TD
         DevMem["/dev/mem (Device File)"]
     end
     
-    subgraph "VirtualFPGALab Shim"
+    subgraph "FPGA-BoardlessBench (F-BB) Shim"
         Shim["Shim Layer<br/>(syscall intercept)"]
     end
 

@@ -1,6 +1,6 @@
 # Scenario 07: Minimum Template
 
-このディレクトリは、VirtualFPGALab で新しい回路設計やファームウェア開発を始めるための「最小構成テンプレート」です。
+このディレクトリは、FPGA-BoardlessBench (F-BB) で新しい回路設計やファームウェア開発を始めるための「最小構成テンプレート」です。
 
 ## 構成ファイル (Manifest)
 

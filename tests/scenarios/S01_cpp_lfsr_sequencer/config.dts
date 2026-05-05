@@ -1,7 +1,7 @@
 /dts-v1/;
 
 / {
-    model = "VirtualFPGALab S01 C++ Showcase Board";
+    model = "F-BB S01 C++ Showcase Board";
     compatible = "vfpga,showcase-s01";
 
     #address-cells = <1>;

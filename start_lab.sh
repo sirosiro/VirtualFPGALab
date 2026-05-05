@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# VirtualFPGALab Integrated Launcher
+# F-BB Integrated Launcher
 # Usage: ./start_lab.sh <scenario_dir>
 
 if [ "$#" -ne 1 ]; then
@@ -40,7 +40,7 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 echo "===================================================="
-echo "   VirtualFPGALab Integrated Launcher"
+echo "   F-BB Integrated Launcher"
 echo "   Scenario: ${SCENARIO_DIR}"
 echo "===================================================="
 
