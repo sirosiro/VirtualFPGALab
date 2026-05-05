@@ -1,5 +1,5 @@
 {
-    "name": "VirtualFPGALab Dev Container",
+    "name": "FPGA-BoardlessBench Dev Container",
     "build": {
         "dockerfile": "Dockerfile",
         "context": ".."

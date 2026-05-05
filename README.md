@@ -1,6 +1,8 @@
 # FPGA-BoardlessBench (F-BB)
 
-FPGA-BoardlessBench (F-BB)は、FPGAを搭載した実機や評価ボードが無い環境でもFPGAで提供されるデバイスを操作するファームウェアの開発を行えるようにするための環境です。Linuxのシステムコールをインターセプトし、エミュレートしたFPGAのデバイスへリダイレクトすることで、あたかも物理的なFPGAを操作しているかのような開発体験を実現します。
+**Software-only FPGA testing & FPGA Simulation environment / 物理ボード不要のFPGAシミュレーション・Verilogテストベンチ環境**
+
+FPGA-BoardlessBench (F-BB)は、FPGAを搭載した実機や評価ボードが無い環境でも、FPGAで提供されるデバイスを操作するファームウェアの開発を行えるようにするためのソフトウェア完結型テスト環境（Software-only FPGA testing environment）です。Linuxのシステムコールをインターセプトし、エミュレートしたFPGAのデバイスへリダイレクトすることで、あたかも物理的なFPGAを操作しているかのような開発体験を実現する強力なFPGAシミュレーション・Verilogテストベンチツールです。
 
 ## 主な機能
 
